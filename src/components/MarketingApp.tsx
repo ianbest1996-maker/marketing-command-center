@@ -1166,6 +1166,9 @@ export function MarketingApp() {
   const [draggingActivityId, setDraggingActivityId] = useState<string | null>(null);
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
   const cloudSaveReady = useRef(false);
+  // 云端数据每个页面会话只拉取一次：首次登录后本地状态即为工作副本，
+  // 之后持续增量同步。避免切换账号时重拉云端覆盖掉尚未同步的本地改动。
+  const cloudLoaded = useRef(false);
   // 上一次成功同步到云端的快照，用来算出「这次改了哪些条目」做增量保存。
   const lastSyncedState = useRef<MarketingState | null>(null);
 
@@ -1242,7 +1245,7 @@ export function MarketingApp() {
   }, [accessibleActivities, activities, currentUser, designAssets, operationSubmissions, tasks]);
 
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || cloudLoaded.current) return;
     let cancelled = false;
 
     fetch("/api/marketing-state")
@@ -1319,6 +1322,7 @@ export function MarketingApp() {
           materialTaskStatuses: nextState.materialTaskStatuses
         };
 
+        cloudLoaded.current = true;
         cloudSaveReady.current = true;
         setCloudSyncEnabled(true);
 
