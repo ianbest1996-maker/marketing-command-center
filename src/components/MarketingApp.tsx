@@ -242,6 +242,13 @@ function notifySubmitted(message = "已提交") {
   }
 }
 
+// 标记物料到货前，先弹窗让操作人填写门店来领取的日期并通知店长。
+function requestMaterialArrival(taskId: string) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("app:material-arrival", { detail: taskId }));
+  }
+}
+
 function SubmitToast() {
   const [items, setItems] = useState<{ id: number; message: string }[]>([]);
 
@@ -268,6 +275,74 @@ function SubmitToast() {
           {item.message}
         </div>
       ))}
+    </div>
+  );
+}
+
+function MaterialArrivalDialog({
+  taskId,
+  activities,
+  stores,
+  tasks,
+  onClose,
+  onConfirm
+}: {
+  taskId: string;
+  activities: Activity[];
+  stores: Store[];
+  tasks: Task[];
+  onClose: () => void;
+  onConfirm: (pickupDate: string) => void;
+}) {
+  const materialTask = tasks.find((task) => task.id === taskId);
+  const activity = materialTask ? activities.find((item) => item.id === materialTask.activityId) : undefined;
+  const targetStores = activity
+    ? (activity.storeIds.map((id) => stores.find((store) => store.id === id)).filter(Boolean) as Store[])
+    : [];
+  const [pickupDate, setPickupDate] = useState(() => addDays(DEMO_TODAY, 1));
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <h3>通知门店领取物料</h3>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <p className="modal-sub">
+          {activity?.name ?? "活动"} · 物料已到货。确认后会通知下列门店店长，请他们在指定日期前来领取物料。
+        </p>
+        <label className="modal-field">
+          <span>请门店来领取的日期</span>
+          <input
+            type="date"
+            value={pickupDate}
+            min={DEMO_TODAY}
+            onChange={(event) => setPickupDate(event.target.value)}
+          />
+        </label>
+        <div className="modal-store-list">
+          <strong>将通知 {targetStores.length} 家门店</strong>
+          {targetStores.length > 0 ? (
+            targetStores.map((store) => (
+              <span key={store.id}>
+                {store.name} · 店长 {store.manager}
+              </span>
+            ))
+          ) : (
+            <span>该活动暂未关联门店</span>
+          )}
+        </div>
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>
+            取消
+          </button>
+          <button className="primary" type="button" disabled={!pickupDate} onClick={() => onConfirm(pickupDate)}>
+            确认并通知门店
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1206,6 +1281,7 @@ export function MarketingApp() {
   const [month, setMonth] = useState(6);
   const [selectedActivityId, setSelectedActivityId] = useState("a1");
   const [draggingActivityId, setDraggingActivityId] = useState<string | null>(null);
+  const [materialArrivalTaskId, setMaterialArrivalTaskId] = useState<string | null>(null);
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
   const cloudSaveReady = useRef(false);
   // 云端数据每个页面会话只拉取一次：首次登录后本地状态即为工作副本，
@@ -1482,6 +1558,15 @@ export function MarketingApp() {
   useEffect(() => {
     setTasks((current) => normalizeBossReviewTaskOwners(current, organizationUsers));
   }, [organizationUsers]);
+
+  useEffect(() => {
+    function onMaterialArrival(event: Event) {
+      const taskId = (event as CustomEvent<string>).detail;
+      if (taskId) setMaterialArrivalTaskId(taskId);
+    }
+    window.addEventListener("app:material-arrival", onMaterialArrival);
+    return () => window.removeEventListener("app:material-arrival", onMaterialArrival);
+  }, []);
 
   useEffect(() => {
     if (accessibleActivities.length === 0) return;
@@ -1895,9 +1980,10 @@ export function MarketingApp() {
     );
   }
 
-  function updateMaterialTaskStatus(taskId: string, status: MaterialProductionStatus) {
+  function updateMaterialTaskStatus(taskId: string, status: MaterialProductionStatus, pickupDate?: string) {
     const materialTask = tasks.find((task) => task.id === taskId);
     const activity = materialTask ? activities.find((item) => item.id === materialTask.activityId) : undefined;
+    const arrivalPickupDate = pickupDate || addDays(DEMO_TODAY, 1);
 
     setMaterialTaskStatuses((current) => ({ ...current, [taskId]: status }));
     setTasks((current) => {
@@ -1908,7 +1994,7 @@ export function MarketingApp() {
               status: status === "物料到货" ? ("已完成" as const) : status === "未开始" ? ("待开始" as const) : ("进行中" as const),
               standard:
                 status === "物料到货"
-                  ? `${task.standard}\n物料已到货，系统已通知相关门店领取物料。`
+                  ? `${task.standard}\n物料已到货，已通知相关门店于 ${arrivalPickupDate} 来领取物料。`
                   : task.standard
             }
           : task
@@ -1930,9 +2016,9 @@ export function MarketingApp() {
           type: "门店领料",
           owner: store?.manager ?? getActivityOwner(activity),
           storeId,
-          dueDate: addDays(DEMO_TODAY, 1),
+          dueDate: arrivalPickupDate,
           status: "等待处理",
-          standard: "设计部已确认物料到货。请店长领取物料，核对数量和内容，完成门店布置后上传现场照片。",
+          standard: `物料已到货，请于 ${arrivalPickupDate} 到指定地点领取物料，核对数量和内容，完成门店布置后上传现场照片。`,
           isKey: true
         });
       });
@@ -2082,6 +2168,20 @@ export function MarketingApp() {
   return (
     <main className="app-shell">
       <SubmitToast />
+      {materialArrivalTaskId && (
+        <MaterialArrivalDialog
+          taskId={materialArrivalTaskId}
+          activities={activities}
+          stores={organizationStores}
+          tasks={tasks}
+          onClose={() => setMaterialArrivalTaskId(null)}
+          onConfirm={(pickupDate) => {
+            updateMaterialTaskStatus(materialArrivalTaskId, "物料到货", pickupDate);
+            notifySubmitted(`已通知门店 ${pickupDate} 来领取物料`);
+            setMaterialArrivalTaskId(null);
+          }}
+        />
+      )}
       <aside className="sidebar">
         <div>
           <p className="eyebrow">MVP 本地版</p>
@@ -4179,7 +4279,11 @@ function DesignerWorkflowCard({
                   className={status === step ? "active" : ""}
                   disabled={!canSetStep}
                   key={step}
-                  onClick={() => updateMaterialTaskStatus(materialTask.id, step)}
+                  onClick={() =>
+                    step === "物料到货"
+                      ? requestMaterialArrival(materialTask.id)
+                      : updateMaterialTaskStatus(materialTask.id, step)
+                  }
                 >
                   {step}
                 </button>
