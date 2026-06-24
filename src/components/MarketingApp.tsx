@@ -2433,6 +2433,7 @@ export function MarketingApp() {
             currentUser={currentUser}
             completeTask={completeTask}
             updateTaskStatus={updateTaskStatus}
+            submitLaunchPlan={submitLaunchPlan}
             submitOperationCompletionReview={submitOperationCompletionReview}
             resubmitOperationSubmission={resubmitOperationSubmission}
             approveOperationSubmission={approveOperationSubmission}
@@ -3247,6 +3248,7 @@ function Dashboard({
             setActiveNav("活动详情");
           }}
           goProposal={() => setActiveNav("项目提报")}
+          goTasks={() => setActiveNav("我的任务")}
         />
       </div>
     );
@@ -3317,6 +3319,7 @@ function Dashboard({
             setActiveNav("活动详情");
           }}
           goProposal={() => setActiveNav("项目提报")}
+          goTasks={() => setActiveNav("我的任务")}
         />
       )}
 
@@ -3618,7 +3621,8 @@ function RoleWorkbench({
   updateMaterialTaskStatus,
   requestDesignForOperation,
   openActivity,
-  goProposal
+  goProposal,
+  goTasks
 }: {
   activities: Activity[];
   allActivities: Activity[];
@@ -3642,6 +3646,7 @@ function RoleWorkbench({
   requestDesignForOperation: (submissionId: string) => void;
   openActivity: (id: string) => void;
   goProposal: () => void;
+  goTasks: () => void;
 }) {
   const scopeIds = new Set(activities.map((activity) => activity.id));
   const scopedTasks = tasks.filter((task) => scopeIds.has(task.activityId));
@@ -3656,7 +3661,8 @@ function RoleWorkbench({
         (submission.status === "待项目总审核" ||
           isOperationFinalReview(submission.status))
     );
-    const launchPendingCount = brandActivities.filter((activity) => activity.status === "已通过待启动").length;
+    const pendingLaunchActivities = brandActivities.filter((activity) => activity.status === "已通过待启动");
+    const launchPendingCount = pendingLaunchActivities.length;
     return (
       <section className="role-workspace">
         {(pendingOperationReviews.length > 0 || launchPendingCount > 0) && (
@@ -3667,17 +3673,35 @@ function RoleWorkbench({
               <p>
                 {pendingOperationReviews.length > 0 && `${pendingOperationReviews.length} 项运营提报待审核/复核`}
                 {pendingOperationReviews.length > 0 && launchPendingCount > 0 && "；"}
-                {launchPendingCount > 0 && `${launchPendingCount} 个项目待下发节点`}
-                。请在下方处理。
+                {launchPendingCount > 0 && `${launchPendingCount} 个项目待排期下派`}
+                。
               </p>
             </div>
           </div>
         )}
-        <LaunchPlanPanel
-          activities={brandActivities}
-          submitLaunchPlan={submitLaunchPlan}
-          openActivity={openActivity}
-        />
+        {launchPendingCount > 0 && (
+          <section className="panel">
+            <div className="panel-title">
+              <h3>审核通过后待排期</h3>
+              <span>{launchPendingCount} 个待排期项目</span>
+            </div>
+            <div className="project-task-list">
+              {pendingLaunchActivities.map((activity) => (
+                <article className="project-task-card priority" key={activity.id}>
+                  <div>
+                    <strong>审核通过：填写节点截止日期并分发任务</strong>
+                    <span>{activity.name} · {activity.startDate} 至 {activity.endDate}</span>
+                    <p>老板已通过项目提案。请到「我的任务」填写各节点截止日期和各部门配合内容后提交分发。</p>
+                  </div>
+                  <div className="node-actions">
+                    <button onClick={() => openActivity(activity.id)}>活动详情</button>
+                    <button className="primary" onClick={goTasks}>去我的任务排期下派</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
         <OperationApprovalPanel
           title="运营审核和复核"
           subtitle="方案先审核方向，执行完成后由项目总复核节点"
@@ -6515,6 +6539,7 @@ function TaskView({
   currentUser,
   completeTask,
   updateTaskStatus,
+  submitLaunchPlan,
   submitOperationCompletionReview,
   resubmitOperationSubmission,
   approveOperationSubmission,
@@ -6535,6 +6560,7 @@ function TaskView({
   currentUser: User;
   completeTask: (id: string) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
+  submitLaunchPlan: (plan: LaunchPlanInput) => void;
   submitOperationCompletionReview: (submissionId: string) => void;
   resubmitOperationSubmission: (
     submissionId: string,
@@ -6560,6 +6586,7 @@ function TaskView({
         activities={activities}
         operationSubmissions={operationSubmissions}
         currentUser={currentUser}
+        submitLaunchPlan={submitLaunchPlan}
         approveOperationSubmission={approveOperationSubmission}
         rejectOperationSubmission={rejectOperationSubmission}
         openActivity={openActivity}
@@ -7095,6 +7122,7 @@ function BrandLeadTaskView({
   activities,
   operationSubmissions,
   currentUser,
+  submitLaunchPlan,
   approveOperationSubmission,
   rejectOperationSubmission,
   openActivity,
@@ -7104,15 +7132,15 @@ function BrandLeadTaskView({
   activities: Activity[];
   operationSubmissions: OperationSubmission[];
   currentUser: User;
+  submitLaunchPlan: (plan: LaunchPlanInput) => void;
   approveOperationSubmission: (submissionId: string, comment?: string) => void;
   rejectOperationSubmission: (submissionId: string, comment?: string) => void;
   openActivity: (id: string) => void;
   goDashboard: () => void;
 }) {
   const brand = getUserDefaultBrand(currentUser);
-  const brandActivityIds = new Set(
-    activities.filter((activity) => brand === "全部" || activity.brand === brand).map((activity) => activity.id)
-  );
+  const brandActivities = activities.filter((activity) => brand === "全部" || activity.brand === brand);
+  const brandActivityIds = new Set(brandActivities.map((activity) => activity.id));
   const pendingOperationReviews = operationSubmissions.filter(
     (submission) =>
       brandActivityIds.has(submission.activityId) &&
@@ -7149,34 +7177,21 @@ function BrandLeadTaskView({
         />
       )}
 
-      <section className="panel">
-        <div className="panel-title">
-          <h3>审核通过后待排期</h3>
-          <span>先处理这些项目</span>
-        </div>
-        <div className="project-task-list">
-          {launchTasks.length > 0 ? (
-            launchTasks.map((task) => {
-              const activity = activities.find((item) => item.id === task.activityId);
-              return (
-                <article className="project-task-card priority" key={task.id}>
-                  <div>
-                    <strong>{task.title}</strong>
-                    <span>{activity?.name} · 截止 {task.dueDate}</span>
-                    <p>{task.standard}</p>
-                  </div>
-                  <div className="node-actions">
-                    <button onClick={() => openActivity(task.activityId)}>活动详情</button>
-                    <button className="primary" onClick={goDashboard}>去首页排期下派</button>
-                  </div>
-                </article>
-              );
-            })
-          ) : (
-            <p className="body-copy">暂无老板已通过、等待你拆解节点的项目。</p>
-          )}
-        </div>
-      </section>
+      {brandActivities.some((activity) => activity.status === "已通过待启动") ? (
+        <LaunchPlanPanel
+          activities={brandActivities}
+          submitLaunchPlan={submitLaunchPlan}
+          openActivity={openActivity}
+        />
+      ) : (
+        <section className="panel">
+          <div className="panel-title">
+            <h3>审核通过后待排期</h3>
+            <span>先处理这些项目</span>
+          </div>
+          <p className="body-copy">暂无老板已通过、等待你拆解节点的项目。</p>
+        </section>
+      )}
 
       <section className="two-column">
         <BrandLeadTaskSection
