@@ -4937,7 +4937,18 @@ function OperationSubmissionPanel({
     ? stores.filter((store) => selectedActivity.storeIds.includes(store.id))
     : [];
   const needsBudget = type === "投流计划" || type === "达人邀请";
-  const canSubmit = Boolean(selectedActivity && title.trim() && benchmarkLinks.trim() && contentPlan.trim());
+  // 同一项目、同一类型若已有「未驳回且未完成」的提报（即还在审核或执行中），
+  // 不允许重复提交，避免一个提案没审核就提交多份。
+  const duplicateSubmission = operationSubmissions.find(
+    (submission) =>
+      submission.activityId === selectedActivity?.id &&
+      submission.type === type &&
+      submission.status !== "驳回修改" &&
+      submission.status !== "执行复核通过"
+  );
+  const canSubmit = Boolean(
+    selectedActivity && title.trim() && benchmarkLinks.trim() && contentPlan.trim() && !duplicateSubmission
+  );
   const operationTypes: OperationSubmission["type"][] = ["短视频计划", "直播计划", "投流计划", "达人邀请"];
 
   useEffect(() => {
@@ -5055,6 +5066,11 @@ function OperationSubmissionPanel({
               <textarea rows={3} value={designRequest} onChange={(event) => setDesignRequest(event.target.value)} />
             </label>
           )}
+          {duplicateSubmission && (
+            <p className="form-hint full-span">
+              该项目的「{type}」已有一条提报（{duplicateSubmission.status}），审核或执行完成前不能重复提交。如需修改请到对应卡片处理。
+            </p>
+          )}
           <button
             className="primary full-span"
             disabled={!canSubmit}
@@ -5076,9 +5092,11 @@ function OperationSubmissionPanel({
               setNeedDesign(false);
             }}
           >
-            {selectedActivity
-              ? `提交「${selectedActivity.name}」给项目总审核`
-              : "请选择项目后提交"}
+            {!selectedActivity
+              ? "请选择项目后提交"
+              : duplicateSubmission
+                ? `「${type}」已提交，待处理`
+                : `提交「${selectedActivity.name}」给项目总审核`}
           </button>
           </div>
         </div>
