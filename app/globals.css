@@ -1226,6 +1226,51 @@ select {
   font-style: normal;
 }
 
+/* 审核时：海报图本身作为可点击的批注画布 */
+.uploaded-file-card.annotatable {
+  border-color: #cbd5f5;
+}
+
+.annotate-surface {
+  position: relative;
+  cursor: crosshair;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.annotate-surface img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+  object-fit: contain;
+  background: #0f172a;
+}
+
+.annotate-surface::after {
+  content: "点击图片任意位置添加批注";
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 2;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.uploaded-file-card .open-original {
+  justify-self: start;
+  font-size: 12px;
+  font-weight: 700;
+  color: #2563eb;
+  text-decoration: none;
+}
+
 .form-error.light {
   color: var(--danger);
 }
@@ -3361,6 +3406,117 @@ select {
 
 .annotation-list strong {
   color: #0f172a;
+}
+
+.annotation-list span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.annotation-list span button {
+  flex: none;
+  border: none;
+  cursor: pointer;
+  width: 18px;
+  height: 18px;
+  line-height: 1;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-weight: 900;
+}
+
+.annotation-list span button:hover {
+  background: #cbd5e1;
+}
+
+/* 提交成功反馈：顶部居中的「✓ 已提交」动画提示 */
+.submit-toast-stack {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  pointer-events: none;
+}
+
+.submit-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 18px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: 0 16px 40px rgba(2, 6, 23, 0.32);
+  animation: submitToastIn 0.34s cubic-bezier(0.16, 1, 0.3, 1),
+    submitToastOut 0.4s ease 1.78s forwards;
+}
+
+.submit-toast-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #22c55e;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+  animation: submitCheckPop 0.42s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+@keyframes submitToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes submitToastOut {
+  to {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+@keyframes submitCheckPop {
+  0% {
+    transform: scale(0) rotate(-30deg);
+  }
+  60% {
+    transform: scale(1.25) rotate(6deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+/* 所有主按钮：点击时轻微回弹，增强「按下去了」的触感 */
+button.primary {
+  transition: transform 0.08s ease, filter 0.15s ease;
+}
+
+button.primary:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .submit-toast,
+  .submit-toast-check {
+    animation-duration: 0.01ms;
+  }
 }
 
 .review-comment-box {

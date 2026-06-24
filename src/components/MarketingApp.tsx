@@ -201,6 +201,8 @@ interface MonitorNode {
 
 interface ReviewAnnotation {
   id: number;
+  filePath: string;
+  number: number;
   x: number;
   y: number;
   text: string;
@@ -230,6 +232,43 @@ function formatFileSize(bytes: number) {
 
 function isImageFile(file: UploadedFile) {
   return file.mimeType.startsWith("image/");
+}
+
+// 提交反馈：任何地方调用即可弹出「✓ 已提交」动画提示。
+function notifySubmitted(message = "已提交") {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("app:submitted", { detail: message }));
+  }
+}
+
+function SubmitToast() {
+  const [items, setItems] = useState<{ id: number; message: string }[]>([]);
+
+  useEffect(() => {
+    function onSubmitted(event: Event) {
+      const message = (event as CustomEvent<string>).detail || "已提交";
+      const id = Date.now() + Math.random();
+      setItems((current) => [...current, { id, message }]);
+      window.setTimeout(() => {
+        setItems((current) => current.filter((item) => item.id !== id));
+      }, 2200);
+    }
+    window.addEventListener("app:submitted", onSubmitted);
+    return () => window.removeEventListener("app:submitted", onSubmitted);
+  }, []);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div className="submit-toast-stack" aria-live="polite">
+      {items.map((item) => (
+        <div className="submit-toast" key={item.id}>
+          <span className="submit-toast-check" aria-hidden>✓</span>
+          {item.message}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function activityStatusText(status: ActivityStatus) {
@@ -1618,6 +1657,7 @@ export function MarketingApp() {
       if (hasLaunchPlanRequest(reviewedTasks, activityId)) return reviewedTasks;
       return [...reviewedTasks, createLaunchPlanRequestTask(activity, reviewedTasks)];
     });
+    notifySubmitted("已通过，等待项目总下发节点");
   }
 
   function rejectActivity(activityId: string, comment: string) {
@@ -1633,6 +1673,7 @@ export function MarketingApp() {
           : task
       )
     );
+    notifySubmitted("已驳回，已退回修改");
   }
 
   function submitLaunchPlan(plan: LaunchPlanInput) {
@@ -1654,6 +1695,7 @@ export function MarketingApp() {
       return [...reviewedTasks, ...createGeneratedTasks(activity, reviewedTasks.length, plan)];
     });
     moveActivity(plan.activityId, "设计和物料");
+    notifySubmitted("节点已下发，任务已分配到各部门");
   }
 
   function submitActivityProposal(proposal: Omit<Activity, "id" | "actualCost" | "status">) {
@@ -1681,6 +1723,7 @@ export function MarketingApp() {
     ]);
     setSelectedActivityId(nextActivity.id);
     setActiveNav("活动详情");
+    notifySubmitted("项目提报已提交，等待老板审核");
   }
 
   function submitIdea(input: IdeaInput) {
@@ -1690,6 +1733,7 @@ export function MarketingApp() {
       status: "待评估"
     };
     setLocalIdeas((current) => [nextIdea, ...current]);
+    notifySubmitted("灵感已提交");
   }
 
   function convertIdeaToActivity(ideaId: string) {
@@ -1728,6 +1772,7 @@ export function MarketingApp() {
       createdAt: DEMO_TODAY
     };
     setStoreAppointments((current) => [nextAppointment, ...current]);
+    notifySubmitted("拍摄/直播需求已发给门店");
   }
 
   function confirmStoreAppointment(appointmentId: string, selectedSlot: string) {
@@ -1738,6 +1783,7 @@ export function MarketingApp() {
           : appointment
       )
     );
+    notifySubmitted("已确认拍摄时间");
   }
 
   function submitOperationSubmission(input: OperationSubmissionInput) {
@@ -1748,6 +1794,7 @@ export function MarketingApp() {
       submittedAt: DEMO_TODAY
     };
     setOperationSubmissions((current) => [nextSubmission, ...current]);
+    notifySubmitted("运营提报已提交，等待项目总审核");
   }
 
   function approveOperationSubmission(
@@ -2008,6 +2055,7 @@ export function MarketingApp() {
           : task
       )
     );
+    notifySubmitted("设计稿已提交，等待项目总审核");
   }
 
   function resetLocalData() {
@@ -2031,6 +2079,7 @@ export function MarketingApp() {
 
   return (
     <main className="app-shell">
+      <SubmitToast />
       <aside className="sidebar">
         <div>
           <p className="eyebrow">MVP 本地版</p>
@@ -6101,7 +6150,7 @@ function DesignAssetCard({
     setAnnotations([]);
   }, [asset.id, asset.reviewComment]);
 
-  function addAnnotation(event: MouseEvent<HTMLDivElement>) {
+  function addAnnotation(event: MouseEvent<HTMLDivElement>, file: UploadedFile) {
     if (!canReview) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
@@ -6109,12 +6158,14 @@ function DesignAssetCard({
     const y = Math.min(100, Math.max(0, ((event.clientY - rect.top) / rect.height) * 100));
     const nextNumber = annotations.length + 1;
     const text = annotationText.trim() || `第${nextNumber}处需要调整`;
-    const line = `批注${nextNumber}：${text}（位置 ${Math.round(x)}%, ${Math.round(y)}%）`;
+    const line = `批注${nextNumber}（${file.name}）：${text}`;
 
     setAnnotations((current) => [
       ...current,
       {
         id: Date.now(),
+        filePath: file.path,
+        number: nextNumber,
         x,
         y,
         text
@@ -6122,6 +6173,10 @@ function DesignAssetCard({
     ]);
     setComment((current) => [current.trim(), line].filter(Boolean).join("\n"));
     setAnnotationText("");
+  }
+
+  function removeAnnotation(id: number) {
+    setAnnotations((current) => current.filter((item) => item.id !== id));
   }
 
   return (
@@ -6150,62 +6205,72 @@ function DesignAssetCard({
         )}
       </div>
 
-      {uploadedFiles.length > 0 && (
-        <div className="uploaded-file-grid">
-          {uploadedFiles.map((file) => (
-            <a href={file.url} target="_blank" rel="noreferrer" className="uploaded-file-card" key={file.path}>
-              {isImageFile(file) ? (
-                <img src={file.url} alt={file.name} />
-              ) : (
-                <div className="file-placeholder">{file.mimeType.includes("pdf") ? "PDF" : "文件"}</div>
-              )}
-              <span>{file.name}</span>
-              <em>{formatFileSize(file.size)}</em>
-            </a>
-          ))}
-        </div>
-      )}
-
-      {reviewerCanAct && (
+      {canReview && uploadedFiles.some(isImageFile) && (
         <div className="annotation-helper">
           <label>
             <span>海报批注</span>
             <input
               value={annotationText}
               onChange={(event) => setAnnotationText(event.target.value)}
-              placeholder="先写修改意见，再点海报对应位置"
-              disabled={!canReview}
+              placeholder="先写这处的修改意见，再点海报对应位置"
             />
           </label>
-          <p>点击预览图可生成编号批注，批注会自动带入驳回意见。</p>
+          <p>直接点击下方海报上的对应位置即可生成编号批注，批注会自动带入下方的修改意见。</p>
         </div>
       )}
 
-      <div
-        className={`asset-preview ${activity?.brand ?? "中餐"} ${canReview ? "annotating" : ""}`}
-        onClick={addAnnotation}
-      >
-        <span>{asset.type}</span>
-        <strong>{asset.previewTitle}</strong>
-        <em>{asset.previewSubtitle}</em>
-        <b>{asset.previewCta}</b>
-        {annotations.map((annotation, index) => (
-          <i
-            className="annotation-dot"
-            key={annotation.id}
-            style={{ left: `${annotation.x}%`, top: `${annotation.y}%` }}
-            title={annotation.text}
-          >
-            {index + 1}
-          </i>
-        ))}
-      </div>
+      {uploadedFiles.length > 0 && (
+        <div className="uploaded-file-grid">
+          {uploadedFiles.map((file) => {
+            const fileAnnotations = annotations.filter((item) => item.filePath === file.path);
+            if (canReview && isImageFile(file)) {
+              return (
+                <div className="uploaded-file-card annotatable" key={file.path}>
+                  <div className="annotate-surface" onClick={(event) => addAnnotation(event, file)}>
+                    <img src={file.url} alt={file.name} />
+                    {fileAnnotations.map((annotation) => (
+                      <i
+                        className="annotation-dot"
+                        key={annotation.id}
+                        style={{ left: `${annotation.x}%`, top: `${annotation.y}%` }}
+                        title={annotation.text}
+                      >
+                        {annotation.number}
+                      </i>
+                    ))}
+                  </div>
+                  <span>{file.name}</span>
+                  <a href={file.url} target="_blank" rel="noreferrer" className="open-original">
+                    打开原图 ↗
+                  </a>
+                </div>
+              );
+            }
+            return (
+              <a href={file.url} target="_blank" rel="noreferrer" className="uploaded-file-card" key={file.path}>
+                {isImageFile(file) ? (
+                  <img src={file.url} alt={file.name} />
+                ) : (
+                  <div className="file-placeholder">{file.mimeType.includes("pdf") ? "PDF" : "文件"}</div>
+                )}
+                <span>{file.name}</span>
+                <em>{formatFileSize(file.size)}</em>
+              </a>
+            );
+          })}
+        </div>
+      )}
 
       {annotations.length > 0 && (
         <div className="annotation-list">
-          <strong>已添加批注</strong>
-          {annotations.map((annotation, index) => (
-            <span key={annotation.id}>批注{index + 1}：{annotation.text}</span>
+          <strong>已添加批注（点 × 可删除）</strong>
+          {annotations.map((annotation) => (
+            <span key={annotation.id}>
+              批注{annotation.number}：{annotation.text}
+              <button type="button" aria-label="删除该批注" onClick={() => removeAnnotation(annotation.id)}>
+                ×
+              </button>
+            </span>
           ))}
         </div>
       )}
