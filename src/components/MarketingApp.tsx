@@ -3820,7 +3820,7 @@ function RoleWorkbench({
         currentUser={currentUser}
         confirmStoreAppointment={confirmStoreAppointment}
         openActivity={openActivity}
-        updateTaskStatus={updateTaskStatus}
+        goTasks={goTasks}
       />
     );
   }
@@ -5469,7 +5469,7 @@ function StoreManagerWorkbench({
   currentUser,
   confirmStoreAppointment,
   openActivity,
-  updateTaskStatus
+  goTasks
 }: {
   tasks: Task[];
   activities: Activity[];
@@ -5477,7 +5477,7 @@ function StoreManagerWorkbench({
   currentUser: User;
   confirmStoreAppointment: (appointmentId: string, selectedSlot: string) => void;
   openActivity: (id: string) => void;
-  updateTaskStatus: (taskId: string, status: TaskStatus) => void;
+  goTasks: () => void;
 }) {
   const currentStore = stores.find((store) => store.manager === currentUser.name);
   const storeAppointments = currentStore
@@ -5505,16 +5505,24 @@ function StoreManagerWorkbench({
           <h3>{currentStore?.name ?? "门店"}今日待办</h3>
           <span>项目总下派给店长的节点</span>
         </div>
-        <div className="store-task-board">
+        <div className="project-task-list">
           {activeTasks.length > 0 ? activeTasks.map((task) => {
             const activity = activities.find((item) => item.id === task.activityId);
+            const isDataTask = task.type.includes("数据") || task.title.includes("数据");
             return (
-              <StoreTaskReportCard
-                activity={activity}
-                key={task.id}
-                task={task}
-                completeTask={() => updateTaskStatus(task.id, "已完成")}
-              />
+              <article className="project-task-card" key={task.id}>
+                <div>
+                  <strong>{task.title}</strong>
+                  <span>{activity?.name} · 截止 {task.dueDate}</span>
+                  <p>{task.standard}</p>
+                </div>
+                <div className="node-actions">
+                  <button onClick={() => openActivity(task.activityId)}>活动详情</button>
+                  <button className="primary" onClick={goTasks}>
+                    {isDataTask ? "去我的任务填数据" : "去我的任务汇报"}
+                  </button>
+                </div>
+              </article>
             );
           }) : (
             <p className="body-copy">今天没有项目总下派给本店的执行任务。</p>
@@ -5565,13 +5573,12 @@ function StoreManagerWorkbench({
         </div>
       </section>
 
-      <section className="two-column">
-        <article className="panel">
-          <div className="panel-title">
-            <h3>{currentStore?.name ?? "门店"}执行标准</h3>
-            <span>按标准完成后，在上方任务卡提交汇报</span>
-          </div>
-          <div className="store-execution-grid">
+      <section className="panel">
+        <div className="panel-title">
+          <h3>{currentStore?.name ?? "门店"}执行标准</h3>
+          <span>按标准完成后，到「我的任务」提交汇报和数据</span>
+        </div>
+        <div className="store-execution-grid">
             {[
               {
                 title: "员工培训",
@@ -5595,10 +5602,7 @@ function StoreManagerWorkbench({
                 <p>{item.detail}</p>
               </div>
             ))}
-          </div>
-        </article>
-
-        <StoreDailyDataPanel currentStore={currentStore} activities={activities} />
+        </div>
       </section>
     </section>
   );
@@ -5806,10 +5810,7 @@ function StoreTaskReportCard({
 }) {
   const [reportText, setReportText] = useState("");
   const [fileNames, setFileNames] = useState<string[]>([]);
-  const [giftSales, setGiftSales] = useState("");
-  const [birthdayCardSales, setBirthdayCardSales] = useState("");
-  const needsWeeklyData = task.title.includes("数据") || task.standard.includes("礼盒") || task.standard.includes("生日卡");
-  const canSubmit = reportText.trim().length > 0 || fileNames.length > 0 || giftSales.trim().length > 0 || birthdayCardSales.trim().length > 0;
+  const canSubmit = reportText.trim().length > 0 || fileNames.length > 0;
 
   return (
     <article className="store-task-card">
@@ -5819,18 +5820,6 @@ function StoreTaskReportCard({
         <p>{task.standard}</p>
       </div>
       <div className="store-task-report">
-        {needsWeeklyData && (
-          <div className="store-task-data-grid">
-            <label>
-              <span>礼盒售卖数量</span>
-              <input inputMode="numeric" value={giftSales} onChange={(event) => setGiftSales(event.target.value)} />
-            </label>
-            <label>
-              <span>生日卡销售数量</span>
-              <input inputMode="numeric" value={birthdayCardSales} onChange={(event) => setBirthdayCardSales(event.target.value)} />
-            </label>
-          </div>
-        )}
         <label>
           <span>完成说明 / 现场反馈</span>
           <textarea
@@ -6666,8 +6655,8 @@ function TaskView({
         appointments={storeAppointments}
         currentUser={currentUser}
         confirmStoreAppointment={confirmStoreAppointment}
+        updateTaskStatus={updateTaskStatus}
         openActivity={openActivity}
-        goDashboard={goDashboard}
       />
     );
   }
@@ -6810,17 +6799,20 @@ function StoreManagerTaskView({
   appointments,
   currentUser,
   confirmStoreAppointment,
-  openActivity,
-  goDashboard
+  updateTaskStatus,
+  openActivity
 }: {
   tasks: Task[];
   activities: Activity[];
   appointments: StoreContentAppointment[];
   currentUser: User;
   confirmStoreAppointment: (appointmentId: string, selectedSlot: string) => void;
+  updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   openActivity: (id: string) => void;
-  goDashboard: () => void;
 }) {
+  function scrollToDailyData() {
+    document.getElementById("store-daily-data-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   const currentStore = stores.find((store) => store.manager === currentUser.name);
   const storeAppointments = currentStore
     ? appointments.filter((appointment) => appointment.storeId === currentStore.id)
@@ -6848,29 +6840,43 @@ function StoreManagerTaskView({
           <h3>{currentStore?.name ?? "门店"}个人待办</h3>
           <span>执行、拍照、培训和数据填报</span>
         </div>
-        <div className="role-task-list">
+        <div className="store-task-board">
           {activeTasks.length > 0 ? activeTasks.map((task) => {
             const activity = activities.find((item) => item.id === task.activityId);
             const isDataTask = task.type.includes("数据") || task.title.includes("数据");
+            if (isDataTask) {
+              return (
+                <article className="role-task-card" key={task.id}>
+                  <div>
+                    <b>需要数据填报</b>
+                    <strong>{task.title}</strong>
+                    <span>{activity?.name} · 截止 {task.dueDate}</span>
+                    <p>{task.standard}</p>
+                  </div>
+                  <div className="node-actions">
+                    <button onClick={() => openActivity(task.activityId)}>活动详情</button>
+                    <button className="primary" onClick={scrollToDailyData}>去填今日数据</button>
+                  </div>
+                </article>
+              );
+            }
             return (
-              <article className="role-task-card" key={task.id}>
-                <div>
-                  <b>{isDataTask ? "需要数据填报" : task.dueDate <= DEMO_TODAY ? "今天要处理" : "待执行"}</b>
-                  <strong>{task.title}</strong>
-                  <span>{activity?.name} · 截止 {task.dueDate}</span>
-                  <p>{task.standard}</p>
-                </div>
-                <div className="node-actions">
-                  <button onClick={() => openActivity(task.activityId)}>活动详情</button>
-                  <button className="primary" onClick={goDashboard}>{isDataTask ? "去首页填数据" : "去首页拍照汇报"}</button>
-                </div>
-              </article>
+              <StoreTaskReportCard
+                activity={activity}
+                key={task.id}
+                task={task}
+                completeTask={() => updateTaskStatus(task.id, "已完成")}
+              />
             );
           }) : (
             <p className="body-copy">暂时没有门店执行待办。</p>
           )}
         </div>
       </section>
+
+      <div id="store-daily-data-panel">
+        <StoreDailyDataPanel currentStore={currentStore} activities={activities} />
+      </div>
 
       <section className="panel">
         <div className="panel-title">
