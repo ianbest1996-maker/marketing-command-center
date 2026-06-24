@@ -1943,20 +1943,48 @@ export function MarketingApp() {
     }
   }
 
-  function rejectOperationSubmission(submissionId: string, comment = "请补充对标内容、执行排期、预算依据和预期结果后重新提交。") {
+  function rejectOperationSubmission(submissionId: string, comment?: string) {
     const targetSubmission = operationSubmissions.find((submission) => submission.id === submissionId);
     const targetActivity = targetSubmission
       ? activities.find((activity) => activity.id === targetSubmission.activityId)
       : undefined;
     if (!targetSubmission || !targetActivity || !currentUser || !canManageActivity(currentUser, targetActivity)) return;
 
+    // 复核阶段（执行完成待复核）被退回：方案本身已通过，只需运营改执行结果后直接重交复核，
+    // 退回到「审核通过可执行」，不必再走一遍方案审核。
+    const isFinalReview = isOperationFinalReview(targetSubmission.status);
+    const effectiveComment =
+      comment?.trim() ||
+      (isFinalReview
+        ? "请按复核意见调整视频/直播/投流执行结果后，在本阶段重新提交复核。"
+        : "请补充对标内容、执行排期、预算依据和预期结果后重新提交。");
+
     setOperationSubmissions((current) =>
       current.map((submission) =>
         submission.id === submissionId
-          ? { ...submission, status: "驳回修改", reviewComment: comment }
+          ? {
+              ...submission,
+              status: isFinalReview ? "审核通过可执行" : "驳回修改",
+              reviewComment: effectiveComment
+            }
           : submission
       )
     );
+
+    if (isFinalReview && targetSubmission) {
+      // 把对应运营任务拉回进行中，提示运营继续处理执行结果。
+      setTasks((current) =>
+        current.map((task) =>
+          task.activityId === targetSubmission.activityId &&
+          task.owner === OPERATIONS_OWNER_NAME &&
+          (task.type.includes("内容") || task.type.includes("投流") || task.type.includes("达人"))
+            ? { ...task, status: "进行中" as const, standard: `${task.standard}\n复核被退回：${effectiveComment}` }
+            : task
+        )
+      );
+    }
+
+    notifySubmitted(isFinalReview ? "已退回运营重新提交执行结果" : "已驳回，退回运营修改方案");
   }
 
   function submitOperationCompletionReview(submissionId: string) {
@@ -1983,6 +2011,7 @@ export function MarketingApp() {
         )
       );
     }
+    notifySubmitted("已提交执行结果，等待项目总复核");
   }
 
   function confirmActivityCost(activityId: string) {
