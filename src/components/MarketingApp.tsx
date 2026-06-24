@@ -1047,23 +1047,43 @@ async function uploadMarketingFile(file: File, activityId: string, area: string)
     throw new Error(`${file.name} 超过 ${maxFileSizeMb}MB，请压缩后再上传。`);
   }
 
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("activityId", activityId);
-  formData.append("area", area);
-
-  const response = await fetch("/api/upload", {
+  // 第一步：向服务端要一个「直传地址」（小请求，远在 Vercel 4.5MB 上限之下）。
+  const signResponse = await fetch("/api/upload-url", {
     method: "POST",
-    body: formData
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ fileName: file.name, activityId, area })
   });
 
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(payload?.error ?? `文件上传失败，状态码 ${response.status}`);
+  if (!signResponse.ok) {
+    const payload = (await signResponse.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(payload?.error ?? `文件上传失败，状态码 ${signResponse.status}`);
   }
 
-  const payload = (await response.json()) as { file: UploadedFile };
-  return payload.file;
+  const { uploadUrl, path, fileUrl } = (await signResponse.json()) as {
+    uploadUrl: string;
+    path: string;
+    fileUrl: string;
+  };
+
+  // 第二步：把文件字节直接 PUT 到 Supabase Storage，不经过 Vercel 函数。
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file
+  });
+
+  if (!uploadResponse.ok) {
+    const detail = await uploadResponse.text().catch(() => "");
+    throw new Error(`云端文件存储失败：${detail || `状态码 ${uploadResponse.status}`}`);
+  }
+
+  return {
+    name: file.name,
+    path,
+    url: fileUrl,
+    mimeType: file.type || "application/octet-stream",
+    size: file.size
+  };
 }
 
 function hasCloudState(state: MarketingState) {
