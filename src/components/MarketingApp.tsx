@@ -2434,6 +2434,7 @@ export function MarketingApp() {
             completeTask={completeTask}
             updateTaskStatus={updateTaskStatus}
             submitLaunchPlan={submitLaunchPlan}
+            submitOperationSubmission={submitOperationSubmission}
             submitOperationCompletionReview={submitOperationCompletionReview}
             resubmitOperationSubmission={resubmitOperationSubmission}
             approveOperationSubmission={approveOperationSubmission}
@@ -3771,6 +3772,7 @@ function RoleWorkbench({
         requestDesignForOperation={requestDesignForOperation}
         submitStoreAppointment={submitStoreAppointment}
         openActivity={openActivity}
+        goTasks={goTasks}
       />
     );
   }
@@ -4658,7 +4660,8 @@ function OperationsWorkbench({
   submitOperationCompletionReview,
   requestDesignForOperation,
   submitStoreAppointment,
-  openActivity
+  openActivity,
+  goTasks
 }: {
   tasks: Task[];
   activities: Activity[];
@@ -4669,6 +4672,7 @@ function OperationsWorkbench({
   requestDesignForOperation: (submissionId: string) => void;
   submitStoreAppointment: (input: StoreAppointmentInput) => void;
   openActivity: (id: string) => void;
+  goTasks: () => void;
 }) {
   const activeTasks = tasks.filter((task) => task.status !== "已完成");
   const rejectedSubmissions = operationSubmissions.filter((item) => item.status === "驳回修改");
@@ -4680,23 +4684,7 @@ function OperationsWorkbench({
   const adReview = operationSubmissions.filter(
     (item) => item.type === "投流计划" && !isOperationComplete(item.status) && item.status !== "驳回修改"
   );
-  const operationProjectIds = new Set([
-    ...tasks.map((task) => task.activityId),
-    ...operationSubmissions.map((submission) => submission.activityId)
-  ]);
-  const operationProjects = activities.filter(
-    (activity) => operationProjectIds.has(activity.id) && activity.status !== "已取消"
-  );
-  const [submissionActivityId, setSubmissionActivityId] = useState(
-    activeTasks[0]?.activityId ?? operationProjects[0]?.id ?? ""
-  );
   const [appointmentActivityId, setAppointmentActivityId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (operationProjects.length > 0 && !operationProjects.some((activity) => activity.id === submissionActivityId)) {
-      setSubmissionActivityId(operationProjects[0].id);
-    }
-  }, [operationProjects, submissionActivityId]);
 
   useEffect(() => {
     function onOpenAppointment(event: Event) {
@@ -4705,13 +4693,6 @@ function OperationsWorkbench({
     window.addEventListener("app:store-appointment", onOpenAppointment);
     return () => window.removeEventListener("app:store-appointment", onOpenAppointment);
   }, []);
-
-  function focusSubmissionProject(activityId: string) {
-    setSubmissionActivityId(activityId);
-    window.setTimeout(() => {
-      document.getElementById("operation-submission-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  }
 
   return (
     <section className="role-workspace operation-workbench">
@@ -4744,21 +4725,9 @@ function OperationsWorkbench({
         activities={activities}
         appointments={storeAppointments}
         operationSubmissions={operationSubmissions}
-        focusSubmission={focusSubmissionProject}
+        focusSubmission={() => goTasks()}
         submitOperationCompletionReview={submitOperationCompletionReview}
         openActivity={openActivity}
-      />
-
-      <OperationSubmissionPanel
-        activities={activities}
-        tasks={tasks}
-        appointments={storeAppointments}
-        operationSubmissions={operationSubmissions}
-        selectedActivityId={submissionActivityId}
-        setSelectedActivityId={setSubmissionActivityId}
-        submitOperationSubmission={submitOperationSubmission}
-        submitOperationCompletionReview={submitOperationCompletionReview}
-        requestDesignForOperation={requestDesignForOperation}
       />
 
       <OperationReviewPipelinePanel
@@ -6540,6 +6509,7 @@ function TaskView({
   completeTask,
   updateTaskStatus,
   submitLaunchPlan,
+  submitOperationSubmission,
   submitOperationCompletionReview,
   resubmitOperationSubmission,
   approveOperationSubmission,
@@ -6561,6 +6531,7 @@ function TaskView({
   completeTask: (id: string) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   submitLaunchPlan: (plan: LaunchPlanInput) => void;
+  submitOperationSubmission: (input: OperationSubmissionInput) => void;
   submitOperationCompletionReview: (submissionId: string) => void;
   resubmitOperationSubmission: (
     submissionId: string,
@@ -6603,6 +6574,7 @@ function TaskView({
         operationSubmissions={operationSubmissions}
         appointments={storeAppointments}
         currentUser={currentUser}
+        submitOperationSubmission={submitOperationSubmission}
         submitOperationCompletionReview={submitOperationCompletionReview}
         resubmitOperationSubmission={resubmitOperationSubmission}
         requestDesignForOperation={requestDesignForOperation}
@@ -6888,6 +6860,7 @@ function OperationsTaskView({
   operationSubmissions,
   appointments,
   currentUser,
+  submitOperationSubmission,
   submitOperationCompletionReview,
   resubmitOperationSubmission,
   requestDesignForOperation,
@@ -6899,6 +6872,7 @@ function OperationsTaskView({
   operationSubmissions: OperationSubmission[];
   appointments: StoreContentAppointment[];
   currentUser: User;
+  submitOperationSubmission: (input: OperationSubmissionInput) => void;
   submitOperationCompletionReview: (submissionId: string) => void;
   resubmitOperationSubmission: (
     submissionId: string,
@@ -6910,6 +6884,14 @@ function OperationsTaskView({
 }) {
   const [resubmitId, setResubmitId] = useState<string | null>(null);
   const resubmitTarget = operationSubmissions.find((submission) => submission.id === resubmitId) ?? null;
+  const [submissionActivityId, setSubmissionActivityId] = useState("");
+
+  function focusSubmissionForm(activityId: string) {
+    setSubmissionActivityId(activityId);
+    window.setTimeout(() => {
+      document.getElementById("operation-submission-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }
   const operationTasks = tasks
     .filter((task) => task.type.includes("内容") || task.type.includes("投流") || task.type.includes("达人"))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -6979,7 +6961,9 @@ function OperationsTaskView({
                 <div className="node-actions">
                   {activity && <button onClick={() => openActivity(activity.id)}>活动详情</button>}
                   {!submissions.length && (
-                    <button className="primary" onClick={goDashboard}>去首页提报计划</button>
+                    <button className="primary" onClick={() => focusSubmissionForm(task.activityId)}>
+                      去提报这个项目
+                    </button>
                   )}
                   {rejectedSubmission && (
                     <button className="primary" onClick={() => setResubmitId(rejectedSubmission.id)}>
@@ -7011,6 +6995,18 @@ function OperationsTaskView({
           )}
         </div>
       </section>
+
+      <OperationSubmissionPanel
+        activities={activities}
+        tasks={tasks}
+        appointments={appointments}
+        operationSubmissions={operationSubmissions}
+        selectedActivityId={submissionActivityId}
+        setSelectedActivityId={setSubmissionActivityId}
+        submitOperationSubmission={submitOperationSubmission}
+        submitOperationCompletionReview={submitOperationCompletionReview}
+        requestDesignForOperation={requestDesignForOperation}
+      />
 
       <OperationReviewPipelinePanel
         activities={activities}
