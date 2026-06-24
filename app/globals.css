@@ -3170,6 +3170,16 @@ select {
   font-style: normal;
 }
 
+.node-item .node-detail {
+  width: fit-content;
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  background: #eef2ff;
+  color: #3730a3;
+}
+
 .node-item.已完成 {
   border-left-color: #16a34a;
 }

@@ -197,6 +197,7 @@ interface MonitorNode {
   dueDate: string;
   state: NodeState;
   reminder: string;
+  detail?: string;
 }
 
 interface ReviewAnnotation {
@@ -944,7 +945,8 @@ function getMonitorNodes(
         materialTasks.latestDueDate || addDays(activity.startDate, -8),
         !designApproved
       ),
-      reminder: designApproved ? `当前物料状态：${materialStatusSummary}` : "设计稿通过后才能进入物料制作"
+      reminder: designApproved ? `当前物料状态：${materialStatusSummary}` : "设计稿通过后才能进入物料制作",
+      detail: designApproved ? `物料：${materialStatusSummary}` : undefined
     },
     {
       label: "平台内容",
@@ -4207,15 +4209,6 @@ function DesignerWorkflowCard({
           <button disabled={!canSubmit} onClick={() => requestUpload(task.activityId)}>
             {reviewing ? "项目总审核中" : rejected ? "重新提交审核" : designApproved ? "审核已通过" : "提交项目总审核"}
           </button>
-          {materialTask && (
-            <button
-              className="primary"
-              disabled={!designApproved || materialArrived}
-              onClick={() => updateMaterialTaskStatus(materialTask.id, nextMaterialStatus)}
-            >
-              {materialArrived ? "已通知门店领取" : nextMaterialStatus === "物料到货" ? "标记物料到货并通知门店" : `推进到${nextMaterialStatus}`}
-            </button>
-          )}
         </div>
       </div>
     </article>
@@ -5873,6 +5866,7 @@ function NodeMonitor({
                 <div className={`node-item ${node.state}`} key={node.label}>
                   <span>{node.state}</span>
                   <strong>{node.label}</strong>
+                  {node.detail && <b className="node-detail">{node.detail}</b>}
                   <em>{node.owner}</em>
                   <small>{node.dueDate}</small>
                 </div>
