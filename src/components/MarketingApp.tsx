@@ -12,6 +12,7 @@ import type {
   DesignAsset,
   Idea,
   MarketingState,
+  MarketingStateDelta,
   OperationSubmission,
   Role,
   Store,
@@ -1171,6 +1172,9 @@ export function MarketingApp() {
   const cloudLoaded = useRef(false);
   // 上一次成功同步到云端的快照，用来算出「这次改了哪些条目」做增量保存。
   const lastSyncedState = useRef<MarketingState | null>(null);
+  // 待保存的防抖任务：定时器 + 这次要发送的增量与对应快照。
+  const pendingSaveTimer = useRef<number | null>(null);
+  const pendingSave = useRef<{ delta: MarketingStateDelta; state: MarketingState } | null>(null);
 
   users = organizationUsers;
   stores = organizationStores;
@@ -1372,20 +1376,13 @@ export function MarketingApp() {
     const delta = computeMarketingStateDelta(baseline, state);
     if (isEmptyDelta(delta)) return;
 
-    const timeout = window.setTimeout(() => {
-      fetch("/api/marketing-state", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(delta)
-      })
-        .then((response) => {
-          // 仅在写入成功后推进基线，失败时下次仍会带上这批改动重试。
-          if (response.ok) lastSyncedState.current = state;
-        })
-        .catch(() => undefined);
+    // 记录待保存的增量，并重置防抖定时器；切换账号时会先 flush 再登出。
+    pendingSave.current = { delta, state };
+    if (pendingSaveTimer.current !== null) window.clearTimeout(pendingSaveTimer.current);
+    pendingSaveTimer.current = window.setTimeout(() => {
+      pendingSaveTimer.current = null;
+      void flushPendingSave();
     }, 700);
-
-    return () => window.clearTimeout(timeout);
   }, [
     organizationUsers,
     organizationStores,
@@ -1399,6 +1396,33 @@ export function MarketingApp() {
     costConfirmedActivityIds,
     materialTaskStatuses
   ]);
+
+  // 立即把待保存的增量发往云端（带当前有效登录态）。切换账号/登出前调用，
+  // 避免防抖保存在 cookie 被清除后才触发、导致 401 丢失。
+  async function flushPendingSave() {
+    if (pendingSaveTimer.current !== null) {
+      window.clearTimeout(pendingSaveTimer.current);
+      pendingSaveTimer.current = null;
+    }
+    const pending = pendingSave.current;
+    if (!pending) return;
+    pendingSave.current = null;
+    try {
+      const response = await fetch("/api/marketing-state", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pending.delta)
+      });
+      if (response.ok) {
+        lastSyncedState.current = pending.state;
+      } else {
+        // 失败则放回待保存，下次状态变化或下次 flush 时重试。
+        pendingSave.current = pending;
+      }
+    } catch {
+      pendingSave.current = pending;
+    }
+  }
 
   useEffect(() => {
     if (currentUserId) {
@@ -2056,8 +2080,10 @@ export function MarketingApp() {
             <button onClick={resetLocalData}>清空本机缓存</button>
             <button
               className="ghost-button"
-              onClick={() => {
-                fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+              onClick={async () => {
+                // 先把未保存的改动存到云端（此时登录态仍有效），再登出。
+                await flushPendingSave();
+                await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
                 setCurrentUserId(null);
               }}
             >
