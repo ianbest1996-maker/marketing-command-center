@@ -1064,7 +1064,8 @@ function getMonitorNodes(
         storeTasks.done || statusReached(activity, ["活动进行中", ...afterActive]),
         storeTasks.active || activity.status === "门店执行准备",
         storeTasks.latestDueDate || addDays(activity.startDate, -3),
-        activity.status === "平台和内容准备"
+        // 物料到货后门店即可开始领料/布置；门店任务已活跃就不再算未开始。
+        !storeTasks.active && activity.status === "平台和内容准备"
       ),
       reminder: "逾期提醒店长和品牌负责人"
     },
@@ -1088,7 +1089,8 @@ function getMonitorNodes(
         dataTasks.done || activity.status === "待复盘" || activity.status === "已完成",
         dataTasks.active || activity.status === "数据收集中",
         dataTasks.latestDueDate || addDays(activity.endDate, 2),
-        activity.status === "活动进行中"
+        // 活动期间门店每天填数据，数据任务已活跃就不再算未开始。
+        !dataTasks.active && activity.status === "活动进行中"
       ),
       reminder: "未提交门店钉钉提醒"
     },
@@ -1100,7 +1102,7 @@ function getMonitorNodes(
         activity.status === "已完成" || reviewTasks.done,
         reviewTasks.active || activity.status === "待复盘",
         reviewTasks.latestDueDate || addDays(activity.endDate, 7),
-        activity.status === "数据收集中"
+        !reviewTasks.active && activity.status === "数据收集中"
       ),
       reminder: "沉淀到下一年度"
     }
