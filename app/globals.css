@@ -3456,6 +3456,8 @@ select {
 
 .modal-card {
   width: min(440px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
   display: grid;
   gap: 14px;
   padding: 20px;
@@ -3539,7 +3541,14 @@ select {
 }
 
 .modal-actions button.primary {
-  border-color: transparent;
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.modal-actions button.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @keyframes modalFade {
