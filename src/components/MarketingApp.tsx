@@ -1907,6 +1907,26 @@ export function MarketingApp() {
     notifySubmitted("运营提报已提交，等待项目总审核");
   }
 
+  function resubmitOperationSubmission(
+    submissionId: string,
+    updates: Pick<OperationSubmission, "title" | "benchmarkLinks" | "contentPlan" | "budget">
+  ) {
+    setOperationSubmissions((current) =>
+      current.map((submission) =>
+        submission.id === submissionId
+          ? {
+              ...submission,
+              ...updates,
+              status: "待项目总审核",
+              reviewComment: undefined,
+              submittedAt: DEMO_TODAY
+            }
+          : submission
+      )
+    );
+    notifySubmitted("已重新提交，等待项目总审核");
+  }
+
   function approveOperationSubmission(
     submissionId: string,
     comment = "审核通过，可以进入执行。"
@@ -2414,6 +2434,9 @@ export function MarketingApp() {
             completeTask={completeTask}
             updateTaskStatus={updateTaskStatus}
             submitOperationCompletionReview={submitOperationCompletionReview}
+            resubmitOperationSubmission={resubmitOperationSubmission}
+            approveOperationSubmission={approveOperationSubmission}
+            rejectOperationSubmission={rejectOperationSubmission}
             requestDesignForOperation={requestDesignForOperation}
             confirmStoreAppointment={confirmStoreAppointment}
             approveActivity={approveActivity}
@@ -4624,6 +4647,7 @@ function OperationsWorkbench({
   openActivity: (id: string) => void;
 }) {
   const activeTasks = tasks.filter((task) => task.status !== "已完成");
+  const rejectedSubmissions = operationSubmissions.filter((item) => item.status === "驳回修改");
   const pendingReview = operationSubmissions.filter((item) => item.status === "待项目总审核");
   const approvedBookable = operationSubmissions.filter(
     (item) => item.status === "审核通过可执行" && (item.type === "短视频计划" || item.type === "直播计划")
@@ -4667,6 +4691,15 @@ function OperationsWorkbench({
 
   return (
     <section className="role-workspace operation-workbench">
+      {rejectedSubmissions.length > 0 && (
+        <div className="approval-alert">
+          <span className="approval-alert-icon" aria-hidden>🔔</span>
+          <div>
+            <strong>有 {rejectedSubmissions.length} 项提报被项目总驳回</strong>
+            <p>请到左侧「我的任务」按项目总意见修改后重新提交。</p>
+          </div>
+        </div>
+      )}
       <section className="panel operation-focus-panel">
         <div>
           <p className="eyebrow">运营工作台</p>
@@ -6483,6 +6516,9 @@ function TaskView({
   completeTask,
   updateTaskStatus,
   submitOperationCompletionReview,
+  resubmitOperationSubmission,
+  approveOperationSubmission,
+  rejectOperationSubmission,
   requestDesignForOperation,
   confirmStoreAppointment,
   approveActivity,
@@ -6500,6 +6536,12 @@ function TaskView({
   completeTask: (id: string) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   submitOperationCompletionReview: (submissionId: string) => void;
+  resubmitOperationSubmission: (
+    submissionId: string,
+    updates: Pick<OperationSubmission, "title" | "benchmarkLinks" | "contentPlan" | "budget">
+  ) => void;
+  approveOperationSubmission: (submissionId: string, comment?: string) => void;
+  rejectOperationSubmission: (submissionId: string, comment?: string) => void;
   requestDesignForOperation: (submissionId: string) => void;
   confirmStoreAppointment: (appointmentId: string, selectedSlot: string) => void;
   approveActivity: (id: string) => void;
@@ -6516,7 +6558,10 @@ function TaskView({
       <BrandLeadTaskView
         tasks={tasks}
         activities={activities}
+        operationSubmissions={operationSubmissions}
         currentUser={currentUser}
+        approveOperationSubmission={approveOperationSubmission}
+        rejectOperationSubmission={rejectOperationSubmission}
         openActivity={openActivity}
         goDashboard={goDashboard}
       />
@@ -6532,6 +6577,7 @@ function TaskView({
         appointments={storeAppointments}
         currentUser={currentUser}
         submitOperationCompletionReview={submitOperationCompletionReview}
+        resubmitOperationSubmission={resubmitOperationSubmission}
         requestDesignForOperation={requestDesignForOperation}
         openActivity={openActivity}
         goDashboard={goDashboard}
@@ -6816,6 +6862,7 @@ function OperationsTaskView({
   appointments,
   currentUser,
   submitOperationCompletionReview,
+  resubmitOperationSubmission,
   requestDesignForOperation,
   openActivity,
   goDashboard
@@ -6826,10 +6873,16 @@ function OperationsTaskView({
   appointments: StoreContentAppointment[];
   currentUser: User;
   submitOperationCompletionReview: (submissionId: string) => void;
+  resubmitOperationSubmission: (
+    submissionId: string,
+    updates: Pick<OperationSubmission, "title" | "benchmarkLinks" | "contentPlan" | "budget">
+  ) => void;
   requestDesignForOperation: (submissionId: string) => void;
   openActivity: (id: string) => void;
   goDashboard: () => void;
 }) {
+  const [resubmitId, setResubmitId] = useState<string | null>(null);
+  const resubmitTarget = operationSubmissions.find((submission) => submission.id === resubmitId) ?? null;
   const operationTasks = tasks
     .filter((task) => task.type.includes("内容") || task.type.includes("投流") || task.type.includes("达人"))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -6902,7 +6955,9 @@ function OperationsTaskView({
                     <button className="primary" onClick={goDashboard}>去首页提报计划</button>
                   )}
                   {rejectedSubmission && (
-                    <button className="primary" onClick={goDashboard}>按意见重提</button>
+                    <button className="primary" onClick={() => setResubmitId(rejectedSubmission.id)}>
+                      按意见重新提交
+                    </button>
                   )}
                   {reviewingSubmission && (
                     <button disabled>等待审核</button>
@@ -6938,6 +6993,99 @@ function OperationsTaskView({
         submitOperationCompletionReview={submitOperationCompletionReview}
         openActivity={openActivity}
       />
+
+      {resubmitTarget && (
+        <OperationResubmitDialog
+          submission={resubmitTarget}
+          activity={activities.find((item) => item.id === resubmitTarget.activityId)}
+          onClose={() => setResubmitId(null)}
+          onSubmit={(updates) => {
+            resubmitOperationSubmission(resubmitTarget.id, updates);
+            setResubmitId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function OperationResubmitDialog({
+  submission,
+  activity,
+  onClose,
+  onSubmit
+}: {
+  submission: OperationSubmission;
+  activity?: Activity;
+  onClose: () => void;
+  onSubmit: (updates: Pick<OperationSubmission, "title" | "benchmarkLinks" | "contentPlan" | "budget">) => void;
+}) {
+  const [title, setTitle] = useState(submission.title);
+  const [benchmarkLinks, setBenchmarkLinks] = useState(submission.benchmarkLinks);
+  const [contentPlan, setContentPlan] = useState(submission.contentPlan);
+  const [budget, setBudget] = useState(submission.budget ? String(submission.budget) : "");
+  const canSubmit = title.trim() && contentPlan.trim();
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card appointment-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <h3>重新提交运营提报</h3>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <p className="modal-sub">
+          {submission.type} · {activity?.name ?? "活动"}。请按项目总意见修改后重新提交审核。
+        </p>
+        {submission.reviewComment && (
+          <div className="modal-store-list">
+            <strong>项目总驳回意见</strong>
+            <span>{submission.reviewComment}</span>
+          </div>
+        )}
+        <div className="appointment-form">
+          <label className="full-span">
+            <span>提报标题</span>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <label className="full-span">
+            <span>对标内容/链接</span>
+            <input value={benchmarkLinks} onChange={(event) => setBenchmarkLinks(event.target.value)} />
+          </label>
+          <label className="full-span">
+            <span>内容方案</span>
+            <textarea rows={4} value={contentPlan} onChange={(event) => setContentPlan(event.target.value)} />
+          </label>
+          <label>
+            <span>预算（元，可选）</span>
+            <input
+              type="number"
+              value={budget}
+              onChange={(event) => setBudget(event.target.value)}
+              placeholder="如 5000"
+            />
+          </label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>取消</button>
+          <button
+            className="primary"
+            type="button"
+            disabled={!canSubmit}
+            onClick={() =>
+              onSubmit({
+                title: title.trim(),
+                benchmarkLinks: benchmarkLinks.trim(),
+                contentPlan: contentPlan.trim(),
+                budget: budget.trim() ? Number(budget) : undefined
+              })
+            }
+          >
+            重新提交审核
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -6945,19 +7093,30 @@ function OperationsTaskView({
 function BrandLeadTaskView({
   tasks,
   activities,
+  operationSubmissions,
   currentUser,
+  approveOperationSubmission,
+  rejectOperationSubmission,
   openActivity,
   goDashboard
 }: {
   tasks: Task[];
   activities: Activity[];
+  operationSubmissions: OperationSubmission[];
   currentUser: User;
+  approveOperationSubmission: (submissionId: string, comment?: string) => void;
+  rejectOperationSubmission: (submissionId: string, comment?: string) => void;
   openActivity: (id: string) => void;
   goDashboard: () => void;
 }) {
   const brand = getUserDefaultBrand(currentUser);
   const brandActivityIds = new Set(
     activities.filter((activity) => brand === "全部" || activity.brand === brand).map((activity) => activity.id)
+  );
+  const pendingOperationReviews = operationSubmissions.filter(
+    (submission) =>
+      brandActivityIds.has(submission.activityId) &&
+      (submission.status === "待项目总审核" || isOperationFinalReview(submission.status))
   );
   const scopedTasks = tasks.filter((task) => brandActivityIds.has(task.activityId));
   const launchTasks = scopedTasks.filter((task) => task.title.includes(LAUNCH_PLAN_TASK_MARKER) && task.status !== "已完成");
@@ -6973,10 +7132,22 @@ function BrandLeadTaskView({
     <div className="page-stack">
       <section className="metric-grid">
         <article className="metric-card"><span>待排期分发</span><strong>{launchTasks.length}</strong></article>
+        <article className="metric-card"><span>运营待审</span><strong>{pendingOperationReviews.length}</strong></article>
         <article className="metric-card"><span>延误任务</span><strong>{delayedTasks.length}</strong></article>
         <article className="metric-card"><span>三天内到期</span><strong>{dueSoonTasks.length}</strong></article>
         <article className="metric-card"><span>已完成</span><strong>{doneTasks.length}</strong></article>
       </section>
+
+      {pendingOperationReviews.length > 0 && (
+        <OperationApprovalPanel
+          title="运营提报审核和复核"
+          subtitle="在这里查看并通过/驳回运营提交的短视频、直播、达人或投流计划"
+          submissions={pendingOperationReviews}
+          activities={activities}
+          approveOperationSubmission={approveOperationSubmission}
+          rejectOperationSubmission={rejectOperationSubmission}
+        />
+      )}
 
       <section className="panel">
         <div className="panel-title">
