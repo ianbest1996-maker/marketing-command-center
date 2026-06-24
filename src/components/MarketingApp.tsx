@@ -249,6 +249,13 @@ function requestMaterialArrival(taskId: string) {
   }
 }
 
+// 运营「去预约门店」：直接弹出预约门店弹窗（可带上要预约的活动 id）。
+function requestStoreAppointment(activityId: string) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("app:store-appointment", { detail: activityId }));
+  }
+}
+
 function SubmitToast() {
   const [items, setItems] = useState<{ id: number; message: string }[]>([]);
 
@@ -4590,12 +4597,21 @@ function OperationsWorkbench({
   const [submissionActivityId, setSubmissionActivityId] = useState(
     activeTasks[0]?.activityId ?? operationProjects[0]?.id ?? ""
   );
+  const [appointmentActivityId, setAppointmentActivityId] = useState<string | null>(null);
 
   useEffect(() => {
     if (operationProjects.length > 0 && !operationProjects.some((activity) => activity.id === submissionActivityId)) {
       setSubmissionActivityId(operationProjects[0].id);
     }
   }, [operationProjects, submissionActivityId]);
+
+  useEffect(() => {
+    function onOpenAppointment(event: Event) {
+      setAppointmentActivityId((event as CustomEvent<string>).detail ?? "");
+    }
+    window.addEventListener("app:store-appointment", onOpenAppointment);
+    return () => window.removeEventListener("app:store-appointment", onOpenAppointment);
+  }, []);
 
   function focusSubmissionProject(activityId: string) {
     setSubmissionActivityId(activityId);
@@ -4652,12 +4668,15 @@ function OperationsWorkbench({
         openActivity={openActivity}
       />
 
-      <OperationAppointmentPanel
-        activities={activities}
-        appointments={storeAppointments}
-        operationSubmissions={operationSubmissions}
-        submitStoreAppointment={submitStoreAppointment}
-      />
+      {appointmentActivityId !== null && (
+        <StoreAppointmentDialog
+          initialActivityId={appointmentActivityId}
+          activities={activities}
+          operationSubmissions={operationSubmissions}
+          submitStoreAppointment={submitStoreAppointment}
+          onClose={() => setAppointmentActivityId(null)}
+        />
+      )}
     </section>
   );
 }
@@ -5158,12 +5177,7 @@ function OperationPipelineColumn({
                   </button>
                 )}
                 {submission.status === "审核通过可执行" && appointmentRequired && !hasConfirmedAppointment && (
-                  <button
-                    className="primary"
-                    onClick={() =>
-                      document.getElementById("operation-appointment-panel")?.scrollIntoView({ behavior: "smooth", block: "start" })
-                    }
-                  >
+                  <button className="primary" onClick={() => requestStoreAppointment(submission.activityId)}>
                     去预约门店
                   </button>
                 )}
@@ -5181,16 +5195,18 @@ function OperationPipelineColumn({
   );
 }
 
-function OperationAppointmentPanel({
+function StoreAppointmentDialog({
+  initialActivityId,
   activities,
-  appointments,
   operationSubmissions,
-  submitStoreAppointment
+  submitStoreAppointment,
+  onClose
 }: {
+  initialActivityId: string;
   activities: Activity[];
-  appointments: StoreContentAppointment[];
   operationSubmissions: OperationSubmission[];
   submitStoreAppointment: (input: StoreAppointmentInput) => void;
+  onClose: () => void;
 }) {
   const approvedPlans = operationSubmissions.filter(
     (submission) =>
@@ -5201,7 +5217,11 @@ function OperationAppointmentPanel({
   const bookableActivities = activities.filter(
     (activity) => activity.storeIds.length > 0 && approvedActivityIds.has(activity.id)
   );
-  const [activityId, setActivityId] = useState(bookableActivities[0]?.id ?? "");
+  const [activityId, setActivityId] = useState(
+    bookableActivities.some((activity) => activity.id === initialActivityId)
+      ? initialActivityId
+      : bookableActivities[0]?.id ?? ""
+  );
   const selectedActivity = bookableActivities.find((activity) => activity.id === activityId) ?? bookableActivities[0];
   const activityStores = selectedActivity ? stores.filter((store) => selectedActivity.storeIds.includes(store.id)) : [];
   const approvedTypes = selectedActivity
@@ -5216,10 +5236,6 @@ function OperationAppointmentPanel({
   const [slotOne, setSlotOne] = useState("06-23 10:00-11:00");
   const [slotTwo, setSlotTwo] = useState("06-23 15:00-16:00");
   const [slotThree, setSlotThree] = useState("06-24 14:00-15:00");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const scopedAppointments = appointments.filter((appointment) =>
-    bookableActivities.some((activity) => activity.id === appointment.activityId)
-  );
   const canSubmit = Boolean(selectedActivity && storeId && approvedTypes.includes(type) && title.trim() && detail.trim() && slotOne.trim());
 
   useEffect(() => {
@@ -5235,47 +5251,18 @@ function OperationAppointmentPanel({
   }, [selectedActivity?.id, storeId, type, approvedTypes.join("|")]);
 
   return (
-    <section className="panel" id="operation-appointment-panel">
-      <div className="panel-title">
-        <h3>门店拍摄/直播预约</h3>
-        <span>给店长候选时间，店长确认后进入首页提醒</span>
-        <button className="primary" disabled={bookableActivities.length === 0} onClick={() => setDialogOpen(true)}>
-          预约门店
-        </button>
-      </div>
-
-      {bookableActivities.length === 0 && (
-        <p className="body-copy">暂无已通过的短视频或直播计划，需先提交项目总审核。</p>
-      )}
-
-      <div className="appointment-list">
-        {scopedAppointments.length > 0 ? scopedAppointments.slice(0, 6).map((appointment) => {
-          const activity = activities.find((item) => item.id === appointment.activityId);
-          const store = stores.find((item) => item.id === appointment.storeId);
-          return (
-            <article className="appointment-card" key={appointment.id}>
-              <div>
-                <strong>{appointment.title}</strong>
-                <span>{store?.name} · {activity?.name}</span>
-              </div>
-              <p>{appointment.detail}</p>
-              <b>{appointment.status === "已确认" ? `已确认 ${appointment.selectedSlot}` : appointment.status}</b>
-            </article>
-          );
-        }) : bookableActivities.length > 0 ? (
-          <p className="body-copy">还没有预约。点右上角「预约门店」给店长发送候选时间。</p>
-        ) : null}
-      </div>
-
-      {dialogOpen && (
-        <div className="modal-overlay" onClick={() => setDialogOpen(false)}>
-          <div className="modal-card appointment-modal" onClick={(event) => event.stopPropagation()}>
-            <div className="modal-head">
-              <h3>预约门店拍摄/直播</h3>
-              <button className="modal-close" type="button" onClick={() => setDialogOpen(false)} aria-label="关闭">
-                ×
-              </button>
-            </div>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card appointment-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <h3>预约门店拍摄/直播</h3>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="关闭">
+            ×
+          </button>
+        </div>
+        {bookableActivities.length === 0 ? (
+          <p className="body-copy">暂无已通过的短视频或直播计划，需先提交项目总审核。</p>
+        ) : (
+          <>
             <div className="appointment-form">
               <label>
                 <span>关联项目</span>
@@ -5314,7 +5301,7 @@ function OperationAppointmentPanel({
               <label><span>候选时间 3</span><input value={slotThree} onChange={(event) => setSlotThree(event.target.value)} /></label>
             </div>
             <div className="modal-actions">
-              <button type="button" onClick={() => setDialogOpen(false)}>取消</button>
+              <button type="button" onClick={onClose}>取消</button>
               <button
                 className="primary"
                 type="button"
@@ -5330,16 +5317,16 @@ function OperationAppointmentPanel({
                     detail,
                     candidateSlots: [slotOne, slotTwo, slotThree].map((slot) => slot.trim()).filter(Boolean)
                   });
-                  setDialogOpen(false);
+                  onClose();
                 }}
               >
                 发送给店长确认
               </button>
             </div>
-          </div>
-        </div>
-      )}
-    </section>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 
