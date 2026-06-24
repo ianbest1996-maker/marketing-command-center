@@ -3551,6 +3551,39 @@ select {
   cursor: not-allowed;
 }
 
+.modal-card.appointment-modal {
+  width: min(580px, 100%);
+}
+
+/* 项目总首页：待审批提醒条 */
+.approval-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #fcd34d;
+  background: linear-gradient(180deg, #fffbeb, #fef3c7);
+  box-shadow: 0 6px 18px rgba(217, 119, 6, 0.12);
+}
+
+.approval-alert-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.approval-alert strong {
+  display: block;
+  color: #92400e;
+  font-size: 15px;
+}
+
+.approval-alert p {
+  margin: 2px 0 0;
+  color: #b45309;
+  font-size: 13px;
+}
+
 @keyframes modalFade {
   from {
     opacity: 0;

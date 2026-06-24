@@ -3581,8 +3581,23 @@ function RoleWorkbench({
         (submission.status === "待项目总审核" ||
           isOperationFinalReview(submission.status))
     );
+    const launchPendingCount = brandActivities.filter((activity) => activity.status === "已通过待启动").length;
     return (
       <section className="role-workspace">
+        {(pendingOperationReviews.length > 0 || launchPendingCount > 0) && (
+          <div className="approval-alert">
+            <span className="approval-alert-icon" aria-hidden>🔔</span>
+            <div>
+              <strong>有待你处理的审批</strong>
+              <p>
+                {pendingOperationReviews.length > 0 && `${pendingOperationReviews.length} 项运营提报待审核/复核`}
+                {pendingOperationReviews.length > 0 && launchPendingCount > 0 && "；"}
+                {launchPendingCount > 0 && `${launchPendingCount} 个项目待下发节点`}
+                。请在下方处理。
+              </p>
+            </div>
+          </div>
+        )}
         <LaunchPlanPanel
           activities={brandActivities}
           submitLaunchPlan={submitLaunchPlan}
@@ -5201,6 +5216,7 @@ function OperationAppointmentPanel({
   const [slotOne, setSlotOne] = useState("06-23 10:00-11:00");
   const [slotTwo, setSlotTwo] = useState("06-23 15:00-16:00");
   const [slotThree, setSlotThree] = useState("06-24 14:00-15:00");
+  const [dialogOpen, setDialogOpen] = useState(false);
   const scopedAppointments = appointments.filter((appointment) =>
     bookableActivities.some((activity) => activity.id === appointment.activityId)
   );
@@ -5223,84 +5239,106 @@ function OperationAppointmentPanel({
       <div className="panel-title">
         <h3>门店拍摄/直播预约</h3>
         <span>给店长候选时间，店长确认后进入首页提醒</span>
+        <button className="primary" disabled={bookableActivities.length === 0} onClick={() => setDialogOpen(true)}>
+          预约门店
+        </button>
       </div>
-      <div className="appointment-layout">
-        <div className="appointment-form">
-          <label>
-            <span>关联项目</span>
-            <select value={selectedActivity?.id ?? ""} onChange={(event) => setActivityId(event.target.value)}>
-              {bookableActivities.map((activity) => (
-                <option value={activity.id} key={activity.id}>{activity.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>预约门店</span>
-            <select value={storeId} onChange={(event) => setStoreId(event.target.value)}>
-              {activityStores.map((store) => (
-                <option value={store.id} key={store.id}>{store.name} · {store.manager}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>配合类型</span>
-            <select value={type} onChange={(event) => setType(event.target.value as StoreContentAppointment["type"])}>
-              {approvedTypes.map((item) => (
-                <option key={item}>{item}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>预约标题</span>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} />
-          </label>
-          <label className="full-span">
-            <span>门店配合内容</span>
-            <textarea rows={3} value={detail} onChange={(event) => setDetail(event.target.value)} />
-          </label>
-          <label><span>候选时间 1</span><input value={slotOne} onChange={(event) => setSlotOne(event.target.value)} /></label>
-          <label><span>候选时间 2</span><input value={slotTwo} onChange={(event) => setSlotTwo(event.target.value)} /></label>
-          <label><span>候选时间 3</span><input value={slotThree} onChange={(event) => setSlotThree(event.target.value)} /></label>
-          <button
-            className="primary"
-            disabled={!canSubmit}
-            onClick={() => {
-              if (!selectedActivity) return;
-              submitStoreAppointment({
-                activityId: selectedActivity.id,
-                storeId,
-                type,
-                title,
-                requestedBy: OPERATIONS_OWNER_NAME,
-                detail,
-                candidateSlots: [slotOne, slotTwo, slotThree].map((slot) => slot.trim()).filter(Boolean)
-              });
-            }}
-          >
-            发送给店长确认
-          </button>
-          {bookableActivities.length === 0 && (
-            <p className="body-copy full-span">暂无已通过的短视频或直播计划，需先提交项目总审核。</p>
-          )}
-        </div>
 
-        <div className="appointment-list">
-          {scopedAppointments.slice(0, 5).map((appointment) => {
-            const activity = activities.find((item) => item.id === appointment.activityId);
-            const store = stores.find((item) => item.id === appointment.storeId);
-            return (
-              <article className="appointment-card" key={appointment.id}>
-                <div>
-                  <strong>{appointment.title}</strong>
-                  <span>{store?.name} · {activity?.name}</span>
-                </div>
-                <p>{appointment.detail}</p>
-                <b>{appointment.status === "已确认" ? `已确认 ${appointment.selectedSlot}` : appointment.status}</b>
-              </article>
-            );
-          })}
-        </div>
+      {bookableActivities.length === 0 && (
+        <p className="body-copy">暂无已通过的短视频或直播计划，需先提交项目总审核。</p>
+      )}
+
+      <div className="appointment-list">
+        {scopedAppointments.length > 0 ? scopedAppointments.slice(0, 6).map((appointment) => {
+          const activity = activities.find((item) => item.id === appointment.activityId);
+          const store = stores.find((item) => item.id === appointment.storeId);
+          return (
+            <article className="appointment-card" key={appointment.id}>
+              <div>
+                <strong>{appointment.title}</strong>
+                <span>{store?.name} · {activity?.name}</span>
+              </div>
+              <p>{appointment.detail}</p>
+              <b>{appointment.status === "已确认" ? `已确认 ${appointment.selectedSlot}` : appointment.status}</b>
+            </article>
+          );
+        }) : bookableActivities.length > 0 ? (
+          <p className="body-copy">还没有预约。点右上角「预约门店」给店长发送候选时间。</p>
+        ) : null}
       </div>
+
+      {dialogOpen && (
+        <div className="modal-overlay" onClick={() => setDialogOpen(false)}>
+          <div className="modal-card appointment-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h3>预约门店拍摄/直播</h3>
+              <button className="modal-close" type="button" onClick={() => setDialogOpen(false)} aria-label="关闭">
+                ×
+              </button>
+            </div>
+            <div className="appointment-form">
+              <label>
+                <span>关联项目</span>
+                <select value={selectedActivity?.id ?? ""} onChange={(event) => setActivityId(event.target.value)}>
+                  {bookableActivities.map((activity) => (
+                    <option value={activity.id} key={activity.id}>{activity.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>预约门店</span>
+                <select value={storeId} onChange={(event) => setStoreId(event.target.value)}>
+                  {activityStores.map((store) => (
+                    <option value={store.id} key={store.id}>{store.name} · {store.manager}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>配合类型</span>
+                <select value={type} onChange={(event) => setType(event.target.value as StoreContentAppointment["type"])}>
+                  {approvedTypes.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>预约标题</span>
+                <input value={title} onChange={(event) => setTitle(event.target.value)} />
+              </label>
+              <label className="full-span">
+                <span>门店配合内容</span>
+                <textarea rows={3} value={detail} onChange={(event) => setDetail(event.target.value)} />
+              </label>
+              <label><span>候选时间 1</span><input value={slotOne} onChange={(event) => setSlotOne(event.target.value)} /></label>
+              <label><span>候选时间 2</span><input value={slotTwo} onChange={(event) => setSlotTwo(event.target.value)} /></label>
+              <label><span>候选时间 3</span><input value={slotThree} onChange={(event) => setSlotThree(event.target.value)} /></label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setDialogOpen(false)}>取消</button>
+              <button
+                className="primary"
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => {
+                  if (!selectedActivity) return;
+                  submitStoreAppointment({
+                    activityId: selectedActivity.id,
+                    storeId,
+                    type,
+                    title,
+                    requestedBy: OPERATIONS_OWNER_NAME,
+                    detail,
+                    candidateSlots: [slotOne, slotTwo, slotThree].map((slot) => slot.trim()).filter(Boolean)
+                  });
+                  setDialogOpen(false);
+                }}
+              >
+                发送给店长确认
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
