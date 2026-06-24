@@ -3452,6 +3452,158 @@ select {
   line-height: 1.5;
 }
 
+/* 店长每日数据填报：日历选择 */
+.daily-calendar {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.daily-calendar-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.daily-calendar-head strong {
+  font-size: 15px;
+}
+
+.daily-calendar-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cal-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-style: normal;
+}
+
+.cal-legend::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #e2e8f0;
+}
+
+.cal-legend.done::before {
+  background: #16a34a;
+}
+
+.cal-legend.selected::before {
+  background: #2563eb;
+}
+
+.cal-legend.today::before {
+  background: #f97316;
+}
+
+.daily-calendar-weekdays,
+.daily-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.daily-calendar-weekdays span {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.daily-cal-day {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  padding: 0;
+}
+
+.daily-cal-day b {
+  font-weight: 700;
+}
+
+.daily-cal-day.out {
+  visibility: hidden;
+}
+
+.daily-cal-day:disabled {
+  cursor: default;
+}
+
+.daily-cal-day.today {
+  border-color: #f97316;
+  box-shadow: inset 0 0 0 1px #f97316;
+}
+
+.daily-cal-day.done {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #166534;
+}
+
+.daily-cal-day.selected {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.32);
+}
+
+.daily-cal-day em {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 9px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.daily-cal-day.selected em {
+  color: #dbeafe;
+}
+
+.daily-cal-day .cal-check {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  font-size: 10px;
+  font-style: normal;
+  color: #16a34a;
+}
+
+.daily-cal-day.selected .cal-check {
+  color: #fff;
+}
+
+.daily-calendar-current {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.daily-calendar-current b {
+  color: var(--ink);
+}
+
 /* 通用弹窗（物料到货通知门店等） */
 .modal-overlay {
   position: fixed;

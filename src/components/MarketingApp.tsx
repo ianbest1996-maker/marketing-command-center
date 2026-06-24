@@ -512,6 +512,26 @@ function addDays(date: string, days: number) {
   return base.toISOString().slice(0, 10);
 }
 
+// 时区安全的纯日期工具（按 UTC 计算，避免本地时区导致的偏移），用于日历排布。
+function dateToUtcMs(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return Date.UTC(y, (m || 1) - 1, d || 1);
+}
+
+function utcMsToDate(ms: number) {
+  const dt = new Date(ms);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
+// 周一为一周起点，返回 0(周一)..6(周日)
+function mondayIndex(dateStr: string) {
+  return (new Date(dateToUtcMs(dateStr)).getUTCDay() + 6) % 7;
+}
+
+function shiftDate(dateStr: string, days: number) {
+  return utcMsToDate(dateToUtcMs(dateStr) + days * 86400000);
+}
+
 function escapeIcsText(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
 }
@@ -5643,11 +5663,35 @@ function StoreDailyDataPanel({
   const ownRank = comparisonRows.findIndex((row) => row.report.storeId === currentStore?.id) + 1;
   const maxRevenue = Math.max(1, ...comparisonRows.map((row) => row.report.revenue));
 
+  // 日历：按所选活动的日期范围铺格子，标出今天、所选日、已填报日。
+  const periodStart = selectedActivity?.startDate ?? "";
+  const periodEnd = selectedActivity?.endDate ?? "";
+  const calendarDays = useMemo(() => {
+    if (!periodStart || !periodEnd) return [] as string[];
+    const gridStart = shiftDate(periodStart, -mondayIndex(periodStart));
+    const gridEnd = shiftDate(periodEnd, 6 - mondayIndex(periodEnd));
+    const days: string[] = [];
+    for (let d = gridStart; d <= gridEnd; d = shiftDate(d, 1)) days.push(d);
+    return days;
+  }, [periodStart, periodEnd]);
+  const submittedDates = new Set(
+    submittedReports.filter((report) => report.activityName === selectedActivity?.name).map((report) => report.date)
+  );
+
   useEffect(() => {
     if (!selectedActivity && storeActivities[0]) {
       setActivityId(storeActivities[0].id);
     }
   }, [selectedActivity?.id, storeActivities[0]?.id]);
+
+  // 切换活动时，把填报日期收敛到活动周期内（优先今天）。
+  useEffect(() => {
+    if (!periodStart || !periodEnd) return;
+    setReportDate((current) => {
+      if (current >= periodStart && current <= periodEnd) return current;
+      return DEMO_TODAY >= periodStart && DEMO_TODAY <= periodEnd ? DEMO_TODAY : periodStart;
+    });
+  }, [periodStart, periodEnd]);
 
   function updateItemValue(key: string, field: "quantity" | "amount", value: string) {
     setItemValues((current) => ({
@@ -5693,11 +5737,7 @@ function StoreDailyDataPanel({
         <span>按活动类型显示填报项</span>
       </div>
       <div className="daily-report-form">
-        <label>
-          <span>填报日期</span>
-          <input type="date" value={reportDate} onChange={(event) => setReportDate(event.target.value)} />
-        </label>
-        <label>
+        <label className="full-span">
           <span>活动</span>
           <select value={selectedActivity?.id ?? ""} onChange={(event) => setActivityId(event.target.value)}>
             {storeActivities.map((activity) => (
@@ -5705,6 +5745,62 @@ function StoreDailyDataPanel({
             ))}
           </select>
         </label>
+        {periodStart && periodEnd ? (
+          <div className="daily-calendar full-span">
+            <div className="daily-calendar-head">
+              <strong>点日期填报</strong>
+              <span>
+                {periodStart} ~ {periodEnd}
+                <i className="cal-legend done">已填</i>
+                <i className="cal-legend selected">填写中</i>
+                <i className="cal-legend today">今天</i>
+              </span>
+            </div>
+            <div className="daily-calendar-weekdays">
+              {["一", "二", "三", "四", "五", "六", "日"].map((weekday) => (
+                <span key={weekday}>{weekday}</span>
+              ))}
+            </div>
+            <div className="daily-calendar-grid">
+              {calendarDays.map((day) => {
+                const inPeriod = day >= periodStart && day <= periodEnd;
+                const dayNum = Number(day.slice(8, 10));
+                const className = [
+                  "daily-cal-day",
+                  inPeriod ? "" : "out",
+                  day === DEMO_TODAY ? "today" : "",
+                  day === reportDate ? "selected" : "",
+                  submittedDates.has(day) ? "done" : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+                return (
+                  <button
+                    type="button"
+                    className={className}
+                    key={day}
+                    disabled={!inPeriod}
+                    onClick={() => setReportDate(day)}
+                    title={day}
+                  >
+                    {dayNum === 1 && <em>{Number(day.slice(5, 7))}月</em>}
+                    <b>{dayNum}</b>
+                    {submittedDates.has(day) && <i className="cal-check">✓</i>}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="daily-calendar-current">
+              正在填写：<b>{reportDate}</b>
+              {submittedDates.has(reportDate) ? "（这天已提交过，可覆盖更新）" : ""}
+            </p>
+          </div>
+        ) : (
+          <label className="full-span">
+            <span>填报日期</span>
+            <input type="date" value={reportDate} onChange={(event) => setReportDate(event.target.value)} />
+          </label>
+        )}
         <div className="daily-report-items full-span">
           {reportItems.map((item) => (
             <div className="daily-report-item" key={item.key}>
