@@ -256,6 +256,13 @@ function requestStoreAppointment(activityId: string) {
   }
 }
 
+// 运营被驳回提案「修改重提」：弹出编辑弹窗，就地改写后重新提交。
+function requestOperationResubmit(submissionId: string) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("app:operation-resubmit", { detail: submissionId }));
+  }
+}
+
 function SubmitToast() {
   const [items, setItems] = useState<{ id: number; message: string }[]>([]);
 
@@ -1305,6 +1312,7 @@ export function MarketingApp() {
   const [selectedActivityId, setSelectedActivityId] = useState("a1");
   const [draggingActivityId, setDraggingActivityId] = useState<string | null>(null);
   const [materialArrivalTaskId, setMaterialArrivalTaskId] = useState<string | null>(null);
+  const [resubmitSubmissionId, setResubmitSubmissionId] = useState<string | null>(null);
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
   const cloudSaveReady = useRef(false);
   // 云端数据每个页面会话只拉取一次：首次登录后本地状态即为工作副本，
@@ -1589,6 +1597,15 @@ export function MarketingApp() {
     }
     window.addEventListener("app:material-arrival", onMaterialArrival);
     return () => window.removeEventListener("app:material-arrival", onMaterialArrival);
+  }, []);
+
+  useEffect(() => {
+    function onResubmit(event: Event) {
+      const submissionId = (event as CustomEvent<string>).detail;
+      if (submissionId) setResubmitSubmissionId(submissionId);
+    }
+    window.addEventListener("app:operation-resubmit", onResubmit);
+    return () => window.removeEventListener("app:operation-resubmit", onResubmit);
   }, []);
 
   useEffect(() => {
@@ -2254,6 +2271,22 @@ export function MarketingApp() {
           }}
         />
       )}
+      {resubmitSubmissionId &&
+        (() => {
+          const target = operationSubmissions.find((submission) => submission.id === resubmitSubmissionId);
+          if (!target) return null;
+          return (
+            <OperationResubmitDialog
+              submission={target}
+              activity={activities.find((item) => item.id === target.activityId)}
+              onClose={() => setResubmitSubmissionId(null)}
+              onSubmit={(updates) => {
+                resubmitOperationSubmission(target.id, updates);
+                setResubmitSubmissionId(null);
+              }}
+            />
+          );
+        })()}
       <aside className="sidebar">
         <div>
           <p className="eyebrow">MVP 本地版</p>
@@ -5257,6 +5290,11 @@ function OperationPipelineColumn({
               {submission.reviewComment ? <small>审核意见：{submission.reviewComment}</small> : null}
               <div className="node-actions">
                 {activity && <button onClick={() => openActivity(activity.id)}>活动详情</button>}
+                {submission.status === "驳回修改" && (
+                  <button className="primary" onClick={() => requestOperationResubmit(submission.id)}>
+                    修改重提
+                  </button>
+                )}
                 {canRequestDesign && (
                   <button onClick={() => requestDesignForOperation(submission.id)}>发给设计做商品图</button>
                 )}
@@ -6900,8 +6938,6 @@ function OperationsTaskView({
   openActivity: (id: string) => void;
   goDashboard: () => void;
 }) {
-  const [resubmitId, setResubmitId] = useState<string | null>(null);
-  const resubmitTarget = operationSubmissions.find((submission) => submission.id === resubmitId) ?? null;
   const [submissionActivityId, setSubmissionActivityId] = useState("");
 
   function focusSubmissionForm(activityId: string) {
@@ -6984,8 +7020,8 @@ function OperationsTaskView({
                     </button>
                   )}
                   {rejectedSubmission && (
-                    <button className="primary" onClick={() => setResubmitId(rejectedSubmission.id)}>
-                      按意见重新提交
+                    <button className="primary" onClick={() => requestOperationResubmit(rejectedSubmission.id)}>
+                      按意见修改重提
                     </button>
                   )}
                   {reviewingSubmission && (
@@ -7034,18 +7070,6 @@ function OperationsTaskView({
         submitOperationCompletionReview={submitOperationCompletionReview}
         openActivity={openActivity}
       />
-
-      {resubmitTarget && (
-        <OperationResubmitDialog
-          submission={resubmitTarget}
-          activity={activities.find((item) => item.id === resubmitTarget.activityId)}
-          onClose={() => setResubmitId(null)}
-          onSubmit={(updates) => {
-            resubmitOperationSubmission(resubmitTarget.id, updates);
-            setResubmitId(null);
-          }}
-        />
-      )}
     </div>
   );
 }
