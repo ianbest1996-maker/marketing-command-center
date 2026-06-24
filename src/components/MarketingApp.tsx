@@ -946,6 +946,18 @@ function getMonitorNodes(
           ? "运营方案已通过，等待预约门店或执行回传"
           : "等待运营提报或项目总审核"
       : "钉钉提醒运营";
+  const operationDetail =
+    activityOperationSubmissions.length === 0
+      ? undefined
+      : operationDone
+        ? "运营：已完成"
+        : activityOperationSubmissions.some((submission) => isOperationFinalReview(submission.status))
+          ? "运营：待项目总复核"
+          : activityOperationSubmissions.some((submission) => submission.status === "审核通过可执行")
+            ? "运营：已通过待执行"
+            : activityOperationSubmissions.some((submission) => submission.status === "待项目总审核")
+              ? "运营：待项目总审核"
+              : "运营：进行中";
   const storeTasks = summarizeTaskGroup(activityTasks, ["门店执行", "门店", "照片"]);
   const dataTasks = summarizeTaskGroup(activityTasks, ["数据"]);
   const reviewTasks = summarizeTaskGroup(activityTasks, ["复盘"]);
@@ -1038,9 +1050,11 @@ function getMonitorNodes(
         operationNodeDone,
         operationActive || activity.status === "平台和内容准备",
         contentTasks.latestDueDate || addDays(activity.startDate, -5),
-        activity.status === "已通过待启动" || activity.status === "设计和物料"
+        // 运营在派单后（设计/物料阶段）即可开始；只要尚无任何运营进展才算未开始。
+        !operationActive && (activity.status === "已通过待启动" || activity.status === "设计和物料")
       ),
-      reminder: operationReminder
+      reminder: operationReminder,
+      detail: operationDetail
     },
     {
       label: "门店准备",
