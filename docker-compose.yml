@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: marketing-command-center-postgres
+    environment:
+      POSTGRES_DB: marketing_center
+      POSTGRES_USER: marketing
+      POSTGRES_PASSWORD: marketing_local_password
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - marketing_postgres_data:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+
+volumes:
+  marketing_postgres_data:
