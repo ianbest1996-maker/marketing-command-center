@@ -4658,6 +4658,11 @@ function OperationApprovalPanel({
               <p>{submission.contentPlan}</p>
               <small>对标：{submission.benchmarkLinks}</small>
               {submission.budget ? <b>{yuan(submission.budget)}</b> : null}
+              {finalReview && (
+                <small className="wechat-remind">
+                  💬 请先在微信查看运营提交的视频/素材，确认无误后再点「复核通过，节点完成」。
+                </small>
+              )}
               <div className="node-actions">
                 <button
                   className="primary"

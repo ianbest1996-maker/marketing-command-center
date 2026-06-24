@@ -3442,6 +3442,16 @@ select {
   background: #cbd5e1;
 }
 
+.wechat-remind {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #ecfdf5;
+  color: #047857;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 /* 通用弹窗（物料到货通知门店等） */
 .modal-overlay {
   position: fixed;
