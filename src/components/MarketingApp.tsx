@@ -4218,7 +4218,11 @@ function getDefaultLaunchPlan(activity: Activity): Omit<LaunchPlanInput, "activi
   };
 }
 
-// 把任务说明（\n 分隔的「键：值」文本）渲染成结构化分行，键加粗，更易读。
+// 关键规格类字段：让设计/运营一眼抓到数量、尺寸、场次、预算等硬指标。
+const HIGHLIGHT_SPEC_KEYS = ["数量", "尺寸", "场次", "预算", "条数", "张数", "份数", "时长"];
+
+// 把任务说明（\n 分隔的「键：值」文本）渲染成结构化分行：
+// 规格类键高亮突出，其它键加粗，说明文字淡化，便于快速看清要求。
 function TaskStandard({ text }: { text: string }) {
   const lines = text
     .split("\n")
@@ -4230,9 +4234,11 @@ function TaskStandard({ text }: { text: string }) {
       {lines.map((line, index) => {
         const sep = line.indexOf("：");
         if (sep > 0 && sep <= 8) {
+          const key = line.slice(0, sep);
+          const isSpec = HIGHLIGHT_SPEC_KEYS.some((spec) => key.includes(spec));
           return (
-            <p className="kv" key={index}>
-              <b>{line.slice(0, sep)}</b>
+            <p className={isSpec ? "kv spec" : "kv"} key={index}>
+              <b>{key}</b>
               <span>{line.slice(sep + 1)}</span>
             </p>
           );

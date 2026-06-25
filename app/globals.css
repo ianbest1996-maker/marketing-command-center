@@ -3452,10 +3452,10 @@ select {
   line-height: 1.5;
 }
 
-/* 任务说明结构化展示（键加粗、分行） */
+/* 任务说明结构化展示（规格高亮、键做胶囊、说明淡化） */
 .task-standard {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   color: var(--muted);
   font-size: 13px;
   line-height: 1.55;
@@ -3473,9 +3473,35 @@ select {
 }
 
 .task-standard .kv b {
-  color: #334155;
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 12px;
+  font-weight: 800;
   white-space: nowrap;
-  font-weight: 700;
+}
+
+.task-standard .kv span {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+/* 规格类（数量/尺寸/场次/预算…）：琥珀色高亮 + 加粗值，最显眼 */
+.task-standard .kv.spec b {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.task-standard .kv.spec span {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.task-standard .note {
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 /* 部门交付要求：按部门分组 */
