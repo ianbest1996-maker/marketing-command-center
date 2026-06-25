@@ -4041,107 +4041,108 @@ function LaunchPlanPanel({
             <strong>部门交付要求</strong>
             <span>这些内容会写进各部门任务卡</span>
           </div>
-          <div className="assignment-grid">
-            <label>
-              <span>设计任务名称</span>
-              <input value={plan.designTaskTitle} onChange={(event) => updatePlan("designTaskTitle", event.target.value)} />
-            </label>
-            <label>
-              <span>运营任务名称</span>
-              <input value={plan.contentTaskTitle} onChange={(event) => updatePlan("contentTaskTitle", event.target.value)} />
-            </label>
-            <label>
-              <span>设计用途</span>
-              <input value={plan.designPurpose} onChange={(event) => updatePlan("designPurpose", event.target.value)} />
-            </label>
-            <label>
-              <span>设计数量</span>
-              <input value={plan.designQuantity} onChange={(event) => updatePlan("designQuantity", event.target.value)} />
-            </label>
-            <label>
-              <span>设计尺寸</span>
-              <input value={plan.designSizes} onChange={(event) => updatePlan("designSizes", event.target.value)} />
-            </label>
-            <label>
-              <span>定制物料要求</span>
-              <input value={plan.customMaterialRequirement} onChange={(event) => updatePlan("customMaterialRequirement", event.target.value)} />
-            </label>
-            <label>
-              <span>短视频数量</span>
-              <input value={plan.shortVideoCount} onChange={(event) => updatePlan("shortVideoCount", event.target.value)} />
-            </label>
-            <label>
-              <span>达人要求</span>
-              <input value={plan.influencerRequirement} onChange={(event) => updatePlan("influencerRequirement", event.target.value)} />
-            </label>
-            <label>
-              <span>达人平台</span>
-              <input value={plan.influencerPlatform} onChange={(event) => updatePlan("influencerPlatform", event.target.value)} />
-            </label>
-            <label>
-              <span>达人预算</span>
-              <input value={plan.influencerBudget} onChange={(event) => updatePlan("influencerBudget", event.target.value)} />
-            </label>
-            <label>
-              <span>直播场次</span>
-              <input value={plan.liveSessionCount} onChange={(event) => updatePlan("liveSessionCount", event.target.value)} />
-            </label>
-            <label className="full-span">
-              <span>项目统筹节点要求</span>
-              <textarea
-                rows={3}
-                value={plan.kickoffTaskNote}
-                onChange={(event) => updatePlan("kickoffTaskNote", event.target.value)}
-              />
-            </label>
-            <label className="full-span">
-              <span>设计部配合内容</span>
-              <textarea
-                rows={3}
-                value={plan.designTaskNote}
-                onChange={(event) => updatePlan("designTaskNote", event.target.value)}
-              />
-            </label>
-            <label className="full-span">
-              <span>物料和费用配合内容</span>
-              <textarea
-                rows={3}
-                value={plan.materialTaskNote}
-                onChange={(event) => updatePlan("materialTaskNote", event.target.value)}
-              />
-            </label>
-            <label className="full-span">
-              <span>运营部配合内容</span>
-              <textarea
-                rows={3}
-                value={plan.operationTaskNote}
-                onChange={(event) => updatePlan("operationTaskNote", event.target.value)}
-              />
-            </label>
-            <label className="full-span">
-              <span>门店配合内容</span>
-              <textarea
-                rows={3}
-                value={plan.storeTaskNote}
-                onChange={(event) => updatePlan("storeTaskNote", event.target.value)}
-              />
-            </label>
-            <label className="full-span">
-              <span>数据回收要求</span>
-              <textarea
-                rows={3}
-                value={plan.dataTaskNote}
-                onChange={(event) => updatePlan("dataTaskNote", event.target.value)}
-              />
-            </label>
-            <label className="full-span">
-              <span>复盘归档要求</span>
-              <textarea
-                rows={3}
-                value={plan.reviewTaskNote}
-                onChange={(event) => updatePlan("reviewTaskNote", event.target.value)}
-              />
-            </label>
+          <div className="assignment-groups">
+            <section className="assignment-group">
+              <h5>项目统筹</h5>
+              <div className="assignment-grid">
+                <label className="full-span">
+                  <span>项目统筹节点要求</span>
+                  <textarea rows={3} value={plan.kickoffTaskNote} onChange={(event) => updatePlan("kickoffTaskNote", event.target.value)} />
+                </label>
+              </div>
+            </section>
+
+            <section className="assignment-group">
+              <h5>🎨 设计部</h5>
+              <div className="assignment-grid">
+                <label>
+                  <span>设计任务名称</span>
+                  <input value={plan.designTaskTitle} onChange={(event) => updatePlan("designTaskTitle", event.target.value)} />
+                </label>
+                <label>
+                  <span>设计用途</span>
+                  <input value={plan.designPurpose} onChange={(event) => updatePlan("designPurpose", event.target.value)} />
+                </label>
+                <label>
+                  <span>设计数量</span>
+                  <input value={plan.designQuantity} onChange={(event) => updatePlan("designQuantity", event.target.value)} />
+                </label>
+                <label>
+                  <span>设计尺寸</span>
+                  <input value={plan.designSizes} onChange={(event) => updatePlan("designSizes", event.target.value)} />
+                </label>
+                <label className="full-span">
+                  <span>定制物料要求</span>
+                  <input value={plan.customMaterialRequirement} onChange={(event) => updatePlan("customMaterialRequirement", event.target.value)} />
+                </label>
+                <label className="full-span">
+                  <span>设计部配合内容</span>
+                  <textarea rows={3} value={plan.designTaskNote} onChange={(event) => updatePlan("designTaskNote", event.target.value)} />
+                </label>
+                <label className="full-span">
+                  <span>物料和费用配合内容</span>
+                  <textarea rows={3} value={plan.materialTaskNote} onChange={(event) => updatePlan("materialTaskNote", event.target.value)} />
+                </label>
+              </div>
+            </section>
+
+            <section className="assignment-group">
+              <h5>📣 运营部</h5>
+              <div className="assignment-grid">
+                <label>
+                  <span>运营任务名称</span>
+                  <input value={plan.contentTaskTitle} onChange={(event) => updatePlan("contentTaskTitle", event.target.value)} />
+                </label>
+                <label>
+                  <span>短视频数量</span>
+                  <input value={plan.shortVideoCount} onChange={(event) => updatePlan("shortVideoCount", event.target.value)} />
+                </label>
+                <label>
+                  <span>直播场次</span>
+                  <input value={plan.liveSessionCount} onChange={(event) => updatePlan("liveSessionCount", event.target.value)} />
+                </label>
+                <label>
+                  <span>达人要求</span>
+                  <input value={plan.influencerRequirement} onChange={(event) => updatePlan("influencerRequirement", event.target.value)} />
+                </label>
+                <label>
+                  <span>达人平台</span>
+                  <input value={plan.influencerPlatform} onChange={(event) => updatePlan("influencerPlatform", event.target.value)} />
+                </label>
+                <label>
+                  <span>达人预算</span>
+                  <input value={plan.influencerBudget} onChange={(event) => updatePlan("influencerBudget", event.target.value)} />
+                </label>
+                <label className="full-span">
+                  <span>运营部配合内容</span>
+                  <textarea rows={3} value={plan.operationTaskNote} onChange={(event) => updatePlan("operationTaskNote", event.target.value)} />
+                </label>
+              </div>
+            </section>
+
+            <section className="assignment-group">
+              <h5>🏪 门店</h5>
+              <div className="assignment-grid">
+                <label className="full-span">
+                  <span>门店配合内容</span>
+                  <textarea rows={3} value={plan.storeTaskNote} onChange={(event) => updatePlan("storeTaskNote", event.target.value)} />
+                </label>
+              </div>
+            </section>
+
+            <section className="assignment-group">
+              <h5>📊 数据与复盘</h5>
+              <div className="assignment-grid">
+                <label className="full-span">
+                  <span>数据回收要求</span>
+                  <textarea rows={3} value={plan.dataTaskNote} onChange={(event) => updatePlan("dataTaskNote", event.target.value)} />
+                </label>
+                <label className="full-span">
+                  <span>复盘归档要求</span>
+                  <textarea rows={3} value={plan.reviewTaskNote} onChange={(event) => updatePlan("reviewTaskNote", event.target.value)} />
+                </label>
+              </div>
+            </section>
           </div>
           <button
             className="primary submit-proposal"
@@ -4215,6 +4216,35 @@ function getDefaultLaunchPlan(activity: Activity): Omit<LaunchPlanInput, "activi
     dataTaskNote: "项目总跟进各门店活动营业额、团购或套餐销量、客流、现场照片和问题反馈。",
     reviewTaskNote: "项目总汇总门店数据、营销数据、费用数据和执行问题，形成活动复盘和下一年度建议。"
   };
+}
+
+// 把任务说明（\n 分隔的「键：值」文本）渲染成结构化分行，键加粗，更易读。
+function TaskStandard({ text }: { text: string }) {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  return (
+    <div className="task-standard">
+      {lines.map((line, index) => {
+        const sep = line.indexOf("：");
+        if (sep > 0 && sep <= 8) {
+          return (
+            <p className="kv" key={index}>
+              <b>{line.slice(0, sep)}</b>
+              <span>{line.slice(sep + 1)}</span>
+            </p>
+          );
+        }
+        return (
+          <p className="note" key={index}>
+            {line}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 function DesignerWorkbench({
@@ -4431,7 +4461,7 @@ function DesignerWorkflowCard({
         <div>
           <strong>{task.title}</strong>
           <span>{activity?.brand ?? "未匹配品牌"} · {activity?.name ?? "未匹配活动"} · 截止 {task.dueDate}</span>
-          <p>{task.standard}</p>
+          <TaskStandard text={task.standard} />
         </div>
         <b>{materialArrived ? "设计节点完成" : reviewing ? "待项目总审核" : rejected ? "需修改" : designApproved ? "设计稿已通过" : task.status}</b>
       </div>
@@ -4896,7 +4926,7 @@ function OperationWorkflowPanel({
                 <div>
                   <strong>{task.title}</strong>
                   <span>{activity?.brand} · {activity?.name} · {task.type}</span>
-                  <p>{task.standard}</p>
+                  <TaskStandard text={task.standard} />
                 </div>
                 <b>{completed ? "运营节点完成" : waitingFinalReview ? "待项目总复核" : task.status}</b>
               </div>
@@ -5546,7 +5576,7 @@ function StoreManagerWorkbench({
                 <div>
                   <strong>{task.title}</strong>
                   <span>{activity?.name} · 截止 {task.dueDate}</span>
-                  <p>{task.standard}</p>
+                  <TaskStandard text={task.standard} />
                 </div>
                 <div className="node-actions">
                   <button onClick={() => openActivity(task.activityId)}>活动详情</button>
@@ -5944,7 +5974,7 @@ function StoreTaskReportCard({
       <div className="store-task-main">
         <strong>{task.title}</strong>
         <span>{activity?.name} · 截止 {task.dueDate}</span>
-        <p>{task.standard}</p>
+        <TaskStandard text={task.standard} />
       </div>
       <div className="store-task-report">
         <label>
@@ -6926,7 +6956,7 @@ function DesignerTaskView({
                   <b>{stateLabel}</b>
                   <strong>{task.title}</strong>
                   <span>{activity?.brand} · {activity?.name} · 截止 {task.dueDate}</span>
-                  <p>{task.standard}</p>
+                  <TaskStandard text={task.standard} />
                   {materialTask && <small>物料节点：{materialTask.title} · {materialStatus}</small>}
                 </div>
                 <div className="node-actions">
@@ -7006,7 +7036,7 @@ function StoreManagerTaskView({
                     <b>需要数据填报</b>
                     <strong>{task.title}</strong>
                     <span>{activity?.name} · 截止 {task.dueDate}</span>
-                    <p>{task.standard}</p>
+                    <TaskStandard text={task.standard} />
                   </div>
                   <div className="node-actions">
                     <button onClick={() => openActivity(task.activityId)}>活动详情</button>
@@ -7180,7 +7210,7 @@ function OperationsTaskView({
                   <b>{statusText}</b>
                   <strong>{task.title}</strong>
                   <span>{activity?.brand} · {activity?.name} · 截止 {task.dueDate}</span>
-                  <p>{task.standard}</p>
+                  <TaskStandard text={task.standard} />
                 </div>
                 <div className="node-actions">
                   {activity && <button onClick={() => openActivity(activity.id)}>活动详情</button>}
@@ -7473,7 +7503,7 @@ function BrandLeadTaskSection({
                 <div>
                   <strong>{task.title}</strong>
                   <span>{activity?.name} · {task.type} · 截止 {task.dueDate}</span>
-                  <p>{task.standard}</p>
+                  <TaskStandard text={task.standard} />
                 </div>
                 <div className="node-actions">
                   <button className="primary" onClick={() => openActivity(task.activityId)}>查看节点状态</button>

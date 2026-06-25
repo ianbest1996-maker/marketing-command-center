@@ -3452,6 +3452,53 @@ select {
   line-height: 1.5;
 }
 
+/* 任务说明结构化展示（键加粗、分行） */
+.task-standard {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.task-standard p {
+  margin: 0;
+}
+
+.task-standard .kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.task-standard .kv b {
+  color: #334155;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+/* 部门交付要求：按部门分组 */
+.assignment-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.assignment-group {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #fbfdff;
+}
+
+.assignment-group h5 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #0f172a;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+}
+
 /* 店长每日数据填报：日历选择 */
 .daily-calendar {
   display: grid;
