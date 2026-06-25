@@ -4254,26 +4254,13 @@ function DesignerWorkbench({
   const assignedActivityIds = new Set(tasks.map((task) => task.activityId));
   const assignedActivities = activities.filter((activity) => assignedActivityIds.has(activity.id));
   const uploadActivities = assignedActivities.length > 0 ? assignedActivities : activities;
-  const [uploadActivityId, setUploadActivityId] = useState(uploadActivities[0]?.id ?? "");
+  const [uploadDialogActivityId, setUploadDialogActivityId] = useState<string | null>(null);
   const activeDesignOrders = designTasks.filter((task) => task.status !== "已完成").length;
   const reviewingAssets = designAssets.filter((asset) => asset.status === "待老板审核").length;
   const materialInProgress = materialTasks.filter(
     (task) => getMaterialProductionStatus(task, materialTaskStatuses) !== "物料到货"
   ).length;
   const urgentTasks = tasks.filter((task) => task.status !== "已完成" && daysBetween(DEMO_TODAY, task.dueDate) <= 3).length;
-
-  useEffect(() => {
-    if (!uploadActivities.some((activity) => activity.id === uploadActivityId)) {
-      setUploadActivityId(uploadActivities[0]?.id ?? "");
-    }
-  }, [uploadActivityId, uploadActivities]);
-
-  function focusUploadPanel(activityId: string) {
-    setUploadActivityId(activityId);
-    window.setTimeout(() => {
-      document.getElementById("design-upload-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
-  }
 
   return (
     <section className="role-workspace designer-workbench">
@@ -4301,14 +4288,8 @@ function DesignerWorkbench({
             materialTaskStatuses={materialTaskStatuses}
             updateTaskStatus={updateTaskStatus}
             updateMaterialTaskStatus={updateMaterialTaskStatus}
-            requestUpload={focusUploadPanel}
+            requestUpload={(activityId) => setUploadDialogActivityId(activityId)}
             openActivity={openActivity}
-          />
-
-          <DesignUploadPanel
-            activities={uploadActivities}
-            selectedActivityId={uploadActivityId}
-            submitDesignUpload={submitDesignUpload}
           />
         </div>
 
@@ -4323,6 +4304,16 @@ function DesignerWorkbench({
           />
         </aside>
       </div>
+
+      {uploadDialogActivityId !== null && (
+        <DesignUploadPanel
+          asDialog
+          activities={uploadActivities}
+          selectedActivityId={uploadDialogActivityId}
+          submitDesignUpload={submitDesignUpload}
+          onClose={() => setUploadDialogActivityId(null)}
+        />
+      )}
     </section>
   );
 }
@@ -4461,28 +4452,25 @@ function DesignerWorkflowCard({
             <strong>{materialTask.title}</strong>
             <span>到货截止 {materialTask.dueDate}</span>
           </div>
-          <div className="material-step-row">
-            {materialProductionSteps.map((step) => {
-              const status = materialStatus ?? "未开始";
-              const currentIndex = materialProductionSteps.indexOf(status);
-              const stepIndex = materialProductionSteps.indexOf(step);
-              const canSetStep = designApproved && status !== "物料到货" && stepIndex <= currentIndex + 1;
-              return (
-                <button
-                  className={status === step ? "active" : ""}
-                  disabled={!canSetStep}
-                  key={step}
-                  onClick={() =>
-                    step === "物料到货"
-                      ? requestMaterialArrival(materialTask.id)
-                      : updateMaterialTaskStatus(materialTask.id, step)
-                  }
-                >
-                  {step}
-                </button>
-              );
-            })}
-          </div>
+          <label className="material-step-select">
+            <span>物料状态</span>
+            <select
+              value={materialStatus ?? "未开始"}
+              disabled={!designApproved || materialArrived}
+              onChange={(event) => {
+                const next = event.target.value as MaterialProductionStatus;
+                if (next === "物料到货") {
+                  requestMaterialArrival(materialTask.id);
+                } else {
+                  updateMaterialTaskStatus(materialTask.id, next);
+                }
+              }}
+            >
+              {materialProductionSteps.map((step) => (
+                <option key={step} value={step}>{step}</option>
+              ))}
+            </select>
+          </label>
         </div>
       )}
 
@@ -6364,11 +6352,15 @@ function DesignReviewPage({
 function DesignUploadPanel({
   activities,
   selectedActivityId,
-  submitDesignUpload
+  submitDesignUpload,
+  asDialog = false,
+  onClose
 }: {
   activities: Activity[];
   selectedActivityId?: string;
   submitDesignUpload: (input: DesignUploadInput) => void;
+  asDialog?: boolean;
+  onClose?: () => void;
 }) {
   const [activityId, setActivityId] = useState(selectedActivityId || activities[0]?.id || "");
   const [title, setTitle] = useState("活动主视觉设计稿");
@@ -6394,13 +6386,41 @@ function DesignUploadPanel({
     }
   }, [activities, activityId, selectedActivityId]);
 
-  return (
-    <section className="panel" id="design-upload-panel">
-      <div className="panel-title">
-        <h3>提交项目总审核</h3>
-        <span>一次可选多张设计稿</span>
-      </div>
-      <div className="design-upload-form">
+  async function handleSubmit() {
+    setIsUploading(true);
+    setUploadError("");
+    setUploadProgress("");
+    try {
+      const uploadedFiles: UploadedFile[] = [];
+      for (const [index, file] of selectedFiles.entries()) {
+        setUploadProgress(`正在上传 ${index + 1}/${selectedFiles.length}：${file.name}`);
+        try {
+          uploadedFiles.push(await uploadMarketingFile(file, activityId, "design-assets"));
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "文件上传失败";
+          throw new Error(`${file.name} 上传失败：${reason}`);
+        }
+      }
+      submitDesignUpload({
+        activityId,
+        title,
+        type,
+        purpose,
+        fileNames: uploadedFiles.map((file) => file.name),
+        files: uploadedFiles
+      });
+      setSelectedFiles([]);
+      setUploadProgress("");
+      onClose?.();
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "文件上传失败");
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  const formBody = (
+    <div className="design-upload-form">
         <label>
           <span>所属活动</span>
           <select value={activityId} onChange={(event) => setActivityId(event.target.value)}>
@@ -6463,44 +6483,35 @@ function DesignUploadPanel({
         )}
         {isUploading && uploadProgress && <p className="form-hint full-span">{uploadProgress}</p>}
         {uploadError && <p className="form-error light full-span">{uploadError}</p>}
-        <button
-          className="primary"
-          disabled={!canSubmit}
-          onClick={async () => {
-            setIsUploading(true);
-            setUploadError("");
-            setUploadProgress("");
-            try {
-              const uploadedFiles: UploadedFile[] = [];
-              for (const [index, file] of selectedFiles.entries()) {
-                setUploadProgress(`正在上传 ${index + 1}/${selectedFiles.length}：${file.name}`);
-                try {
-                  uploadedFiles.push(await uploadMarketingFile(file, activityId, "design-assets"));
-                } catch (error) {
-                  const reason = error instanceof Error ? error.message : "文件上传失败";
-                  throw new Error(`${file.name} 上传失败：${reason}`);
-                }
-              }
-              submitDesignUpload({
-                activityId,
-                title,
-                type,
-                purpose,
-                fileNames: uploadedFiles.map((file) => file.name),
-                files: uploadedFiles
-              });
-              setSelectedFiles([]);
-              setUploadProgress("");
-            } catch (error) {
-              setUploadError(error instanceof Error ? error.message : "文件上传失败");
-            } finally {
-              setIsUploading(false);
-            }
-          }}
-        >
+        <button className="primary" disabled={!canSubmit} onClick={handleSubmit}>
           {isUploading ? "正在上传..." : "提交给项目总审核"}
         </button>
       </div>
+  );
+
+  if (asDialog) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-card design-upload-modal" onClick={(event) => event.stopPropagation()}>
+          <div className="modal-head">
+            <h3>提交设计稿给项目总审核</h3>
+            <button className="modal-close" type="button" onClick={onClose} aria-label="关闭">
+              ×
+            </button>
+          </div>
+          {formBody}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section className="panel" id="design-upload-panel">
+      <div className="panel-title">
+        <h3>提交项目总审核</h3>
+        <span>一次可选多张设计稿</span>
+      </div>
+      {formBody}
     </section>
   );
 }

@@ -3717,6 +3717,35 @@ select {
   width: min(580px, 100%);
 }
 
+.modal-card.design-upload-modal {
+  width: min(640px, 100%);
+}
+
+.material-step-select {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.material-step-select span {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.material-step-select select {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-weight: 700;
+  background: #fff;
+}
+
+.material-step-select select:disabled {
+  background: #f1f5f9;
+  color: var(--muted);
+}
+
 /* 项目总首页：待审批提醒条 */
 .approval-alert {
   display: flex;
