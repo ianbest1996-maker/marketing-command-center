@@ -183,6 +183,7 @@ export interface MarketingState {
   ideas: Idea[];
   storeAppointments: StoreContentAppointment[];
   operationSubmissions: OperationSubmission[];
+  storeReports: StoreReport[];
   costConfirmedActivityIds: string[];
   materialTaskStatuses: Record<string, string>;
 }
@@ -203,6 +204,7 @@ export interface MarketingStateDelta {
   ideas?: CollectionDelta<Idea>;
   storeAppointments?: CollectionDelta<StoreContentAppointment>;
   operationSubmissions?: CollectionDelta<OperationSubmission>;
+  storeReports?: CollectionDelta<StoreReport>;
   costConfirmedActivityIds?: { added: string[]; removed: string[] };
   materialTaskStatuses?: { upserts: Record<string, string>; deleteIds: string[] };
 }

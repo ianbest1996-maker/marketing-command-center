@@ -90,6 +90,9 @@ export function computeMarketingStateDelta(
   const operationSubmissions = diffCollection(prev.operationSubmissions, next.operationSubmissions);
   if (operationSubmissions) delta.operationSubmissions = operationSubmissions;
 
+  const storeReports = diffCollection(prev.storeReports ?? [], next.storeReports ?? []);
+  if (storeReports) delta.storeReports = storeReports;
+
   const costConfirmedActivityIds = diffStringSet(
     prev.costConfirmedActivityIds,
     next.costConfirmedActivityIds

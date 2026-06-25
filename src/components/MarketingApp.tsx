@@ -54,7 +54,7 @@ const TRIAL_LOGIN_PASSWORD = "123456";
 let users: User[] = demoUsers;
 let stores: Store[] = [];
 let brandLeaders: Record<Brand, string> = { ...DEFAULT_BRAND_LEADERS };
-const storeReports: StoreReport[] = [];
+let storeReports: StoreReport[] = [];
 
 function normalizeUsers(inputUsers: User[]) {
   return inputUsers.map((user) =>
@@ -700,6 +700,7 @@ function readSavedState() {
       ideas?: Idea[];
       storeAppointments?: StoreContentAppointment[];
       operationSubmissions?: OperationSubmission[];
+      storeReports?: StoreReport[];
       costConfirmedActivityIds?: string[];
       materialTaskStatuses?: Record<string, MaterialProductionStatus>;
     };
@@ -1279,6 +1280,7 @@ function buildInitialMarketingState(): MarketingState {
     ideas: [],
     storeAppointments: [],
     operationSubmissions: [],
+    storeReports: [],
     costConfirmedActivityIds: [],
     materialTaskStatuses: {}
   };
@@ -1320,6 +1322,9 @@ export function MarketingApp() {
   const [operationSubmissions, setOperationSubmissions] = useState<OperationSubmission[]>(
     () => readSavedState()?.operationSubmissions ?? []
   );
+  const [storeReportsState, setStoreReports] = useState<StoreReport[]>(
+    () => readSavedState()?.storeReports ?? []
+  );
   const [costConfirmedActivityIds, setCostConfirmedActivityIds] = useState<string[]>(
     () => readSavedState()?.costConfirmedActivityIds ?? []
   );
@@ -1347,6 +1352,7 @@ export function MarketingApp() {
   users = organizationUsers;
   stores = organizationStores;
   brandLeaders = brandLeaderConfig;
+  storeReports = storeReportsState;
 
   const currentUser = organizationUsers.find((user) => user.id === currentUserId) ?? null;
   const visibleNavItems = useMemo(() => (currentUser ? getVisibleNavItems(currentUser) : []), [currentUser]);
@@ -1447,6 +1453,7 @@ export function MarketingApp() {
                 payload.state.storeAppointments ?? [],
               operationSubmissions:
                 payload.state.operationSubmissions ?? [],
+              storeReports: payload.state.storeReports ?? [],
               costConfirmedActivityIds: payload.state.costConfirmedActivityIds ?? [],
               materialTaskStatuses: payload.state.materialTaskStatuses ?? {}
             }
@@ -1476,6 +1483,7 @@ export function MarketingApp() {
         setLocalIdeas(nextState.ideas);
         setStoreAppointments(nextState.storeAppointments);
         setOperationSubmissions(nextState.operationSubmissions);
+        setStoreReports(nextState.storeReports);
         setCostConfirmedActivityIds(nextState.costConfirmedActivityIds);
         setMaterialTaskStatuses(nextState.materialTaskStatuses as Record<string, MaterialProductionStatus>);
 
@@ -1490,6 +1498,7 @@ export function MarketingApp() {
           ideas: nextState.ideas,
           storeAppointments: nextState.storeAppointments,
           operationSubmissions: nextState.operationSubmissions,
+          storeReports: nextState.storeReports,
           costConfirmedActivityIds: nextState.costConfirmedActivityIds,
           materialTaskStatuses: nextState.materialTaskStatuses
         };
@@ -1529,6 +1538,7 @@ export function MarketingApp() {
       ideas: localIdeas,
       storeAppointments,
       operationSubmissions,
+      storeReports: storeReportsState,
       costConfirmedActivityIds,
       materialTaskStatuses
     };
@@ -1561,6 +1571,7 @@ export function MarketingApp() {
     localIdeas,
     storeAppointments,
     operationSubmissions,
+    storeReportsState,
     costConfirmedActivityIds,
     materialTaskStatuses
   ]);
@@ -1933,6 +1944,17 @@ export function MarketingApp() {
     notifySubmitted("已确认拍摄时间");
   }
 
+  // 店长每日数据：按 门店+活动+日期 唯一 id，重复提交则覆盖更新。
+  function submitStoreReport(report: StoreReport) {
+    setStoreReports((current) => {
+      const exists = current.some((item) => item.id === report.id);
+      return exists
+        ? current.map((item) => (item.id === report.id ? report : item))
+        : [report, ...current];
+    });
+    notifySubmitted("今日数据已提交");
+  }
+
   function submitOperationSubmission(input: OperationSubmissionInput) {
     const nextSubmission: OperationSubmission = {
       ...input,
@@ -2265,6 +2287,7 @@ export function MarketingApp() {
     setLocalIdeas([]);
     setStoreAppointments([]);
     setOperationSubmissions([]);
+    setStoreReports([]);
     setCostConfirmedActivityIds([]);
     setMaterialTaskStatuses({});
     setSelectedActivityId("");
@@ -2493,6 +2516,7 @@ export function MarketingApp() {
             approveOperationSubmission={approveOperationSubmission}
             rejectOperationSubmission={rejectOperationSubmission}
             requestDesignForOperation={requestDesignForOperation}
+            submitStoreReport={submitStoreReport}
             confirmStoreAppointment={confirmStoreAppointment}
             approveActivity={approveActivity}
             rejectActivity={rejectActivity}
@@ -5630,10 +5654,12 @@ function StoreManagerWorkbench({
 
 function StoreDailyDataPanel({
   currentStore,
-  activities
+  activities,
+  submitStoreReport
 }: {
   currentStore?: { id: string; name: string };
   activities: Activity[];
+  submitStoreReport: (report: StoreReport) => void;
 }) {
   const storeActivities = currentStore
     ? activities.filter((activity) => activity.storeIds.includes(currentStore.id) && activity.status !== "已取消")
@@ -5646,7 +5672,12 @@ function StoreDailyDataPanel({
   const [visits, setVisits] = useState("");
   const [note, setNote] = useState("");
   const [photoNames, setPhotoNames] = useState<string[]>([]);
-  const [submittedReports, setSubmittedReports] = useState<Array<{ id: string; activityName: string; date: string; summary: string }>>([]);
+  const storeReportsForActivity =
+    selectedActivity && currentStore
+      ? storeReports
+          .filter((report) => report.storeId === currentStore.id && report.activityId === selectedActivity.id)
+          .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? ""))
+      : [];
   const canSubmit =
     Boolean(selectedActivity) &&
     (reportItems.some((item) => itemValues[item.key]?.quantity || itemValues[item.key]?.amount) || visits.trim() || note.trim());
@@ -5675,7 +5706,7 @@ function StoreDailyDataPanel({
     return days;
   }, [periodStart, periodEnd]);
   const submittedDates = new Set(
-    submittedReports.filter((report) => report.activityName === selectedActivity?.name).map((report) => report.date)
+    storeReportsForActivity.map((report) => report.submittedAt).filter(Boolean) as string[]
   );
 
   useEffect(() => {
@@ -5705,25 +5736,35 @@ function StoreDailyDataPanel({
   }
 
   function submitDailyReport() {
-    if (!selectedActivity) return;
-    const summary = reportItems
+    if (!selectedActivity || !currentStore) return;
+    let totalQuantity = 0;
+    let totalAmount = 0;
+    const summaryParts = reportItems
       .map((item) => {
         const value = itemValues[item.key];
+        const quantity = Number(value?.quantity || 0);
+        const amount = Number(value?.amount || 0);
+        totalQuantity += quantity;
+        totalAmount += amount;
         if (!value?.quantity && !value?.amount) return null;
-        return `${item.label} ${value.quantity || 0} 份 / ${value.amount || 0} 元`;
+        return `${item.label} ${quantity} 份 / ${amount} 元`;
       })
-      .filter(Boolean)
-      .join("；");
+      .filter(Boolean);
+    const noteText = [summaryParts.join("；"), note.trim()].filter(Boolean).join(" ｜ ");
 
-    setSubmittedReports((current) => [
-      {
-        id: `daily-${current.length + 1}`,
-        activityName: selectedActivity.name,
-        date: reportDate,
-        summary: summary || `客流 ${visits || 0} 人`
-      },
-      ...current
-    ]);
+    submitStoreReport({
+      // 同一门店+活动+日期固定 id，重复提交即覆盖更新。
+      id: `sr-${currentStore.id}-${selectedActivity.id}-${reportDate}`,
+      activityId: selectedActivity.id,
+      storeId: currentStore.id,
+      packageSales: totalQuantity,
+      revenue: totalAmount,
+      visits: Number(visits || 0),
+      beforeValue: 0,
+      lastYearValue: 0,
+      note: noteText,
+      submittedAt: reportDate
+    });
     setItemValues({});
     setVisits("");
     setNote("");
@@ -5854,11 +5895,13 @@ function StoreDailyDataPanel({
         </button>
       </div>
       <div className="daily-report-history">
-        <strong>本机最近提交</strong>
-        {submittedReports.length > 0 ? submittedReports.slice(0, 3).map((report) => (
-          <span key={report.id}>{report.date} · {report.activityName} · {report.summary}</span>
+        <strong>本店该活动最近提交</strong>
+        {storeReportsForActivity.length > 0 ? storeReportsForActivity.slice(0, 4).map((report) => (
+          <span key={report.id}>
+            {report.submittedAt} · 销量 {report.packageSales} · {yuan(report.revenue)} · 客流 {report.visits}
+          </span>
         )) : (
-          <span>今天还没有提交数据。</span>
+          <span>这个活动还没有提交过数据。</span>
         )}
       </div>
       <div className="store-comparison-panel">
@@ -6661,6 +6704,7 @@ function TaskView({
   approveOperationSubmission,
   rejectOperationSubmission,
   requestDesignForOperation,
+  submitStoreReport,
   confirmStoreAppointment,
   approveActivity,
   rejectActivity,
@@ -6686,6 +6730,7 @@ function TaskView({
   approveOperationSubmission: (submissionId: string, comment?: string) => void;
   rejectOperationSubmission: (submissionId: string, comment?: string) => void;
   requestDesignForOperation: (submissionId: string) => void;
+  submitStoreReport: (report: StoreReport) => void;
   confirmStoreAppointment: (appointmentId: string, selectedSlot: string) => void;
   approveActivity: (id: string) => void;
   rejectActivity: (id: string, comment: string) => void;
@@ -6752,6 +6797,7 @@ function TaskView({
         currentUser={currentUser}
         confirmStoreAppointment={confirmStoreAppointment}
         updateTaskStatus={updateTaskStatus}
+        submitStoreReport={submitStoreReport}
         openActivity={openActivity}
       />
     );
@@ -6896,6 +6942,7 @@ function StoreManagerTaskView({
   currentUser,
   confirmStoreAppointment,
   updateTaskStatus,
+  submitStoreReport,
   openActivity
 }: {
   tasks: Task[];
@@ -6904,6 +6951,7 @@ function StoreManagerTaskView({
   currentUser: User;
   confirmStoreAppointment: (appointmentId: string, selectedSlot: string) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
+  submitStoreReport: (report: StoreReport) => void;
   openActivity: (id: string) => void;
 }) {
   function scrollToDailyData() {
@@ -6971,7 +7019,11 @@ function StoreManagerTaskView({
       </section>
 
       <div id="store-daily-data-panel">
-        <StoreDailyDataPanel currentStore={currentStore} activities={activities} />
+        <StoreDailyDataPanel
+          currentStore={currentStore}
+          activities={activities}
+          submitStoreReport={submitStoreReport}
+        />
       </div>
 
       <section className="panel">

@@ -8,6 +8,7 @@ import type {
   OperationSubmission,
   Store,
   StoreContentAppointment,
+  StoreReport,
   Task,
   UploadedFile,
   User
@@ -374,6 +375,36 @@ function fromOperationSubmission(submission: OperationSubmission): AnyRow {
   };
 }
 
+function toStoreReport(row: AnyRow): StoreReport {
+  return {
+    id: String(row.id),
+    activityId: String(row.activity_id),
+    storeId: String(row.store_id),
+    packageSales: Number(row.package_sales),
+    revenue: Number(row.revenue),
+    visits: Number(row.visits),
+    beforeValue: Number(row.before_value),
+    lastYearValue: Number(row.last_year_value),
+    note: String(row.note ?? ""),
+    submittedAt: row.submitted_at ? String(row.submitted_at) : undefined
+  };
+}
+
+function fromStoreReport(report: StoreReport): AnyRow {
+  return {
+    id: report.id,
+    activity_id: report.activityId,
+    store_id: report.storeId,
+    package_sales: report.packageSales,
+    revenue: report.revenue,
+    visits: report.visits,
+    before_value: report.beforeValue,
+    last_year_value: report.lastYearValue,
+    note: report.note,
+    submitted_at: report.submittedAt ?? null
+  };
+}
+
 function toIdea(row: AnyRow, brands: string[]): Idea {
   return {
     id: String(row.id),
@@ -421,6 +452,7 @@ export async function readMarketingState(): Promise<MarketingState> {
     ideaBrandRows,
     appointmentRows,
     operationSubmissionRows,
+    storeReportRows,
     materialStatusRows,
     costConfirmationRows
   ] = await Promise.all([
@@ -435,6 +467,7 @@ export async function readMarketingState(): Promise<MarketingState> {
     readTable<AnyRow>("idea_brands", "idea_id.asc"),
     readTable<AnyRow>("store_appointments"),
     readTable<AnyRow>("operation_submissions"),
+    readTable<AnyRow>("store_reports"),
     readTable<AnyRow>("material_task_statuses", "task_id.asc"),
     readTable<AnyRow>("cost_confirmations", "activity_id.asc")
   ]);
@@ -461,6 +494,7 @@ export async function readMarketingState(): Promise<MarketingState> {
     ideas: ideaRows.map((row) => toIdea(row, ideaBrands.get(String(row.id)) ?? [])),
     storeAppointments: appointmentRows.map(toAppointment),
     operationSubmissions: operationSubmissionRows.map(toOperationSubmission),
+    storeReports: storeReportRows.map(toStoreReport),
     costConfirmedActivityIds: costConfirmationRows.map((row) => String(row.activity_id)),
     materialTaskStatuses: Object.fromEntries(
       materialStatusRows.map((row) => [String(row.task_id), String(row.status)])
@@ -475,6 +509,7 @@ export async function writeMarketingState(state: MarketingState) {
 
   await clearTable("cost_confirmations", "activity_id");
   await clearTable("material_task_statuses", "task_id");
+  await clearTable("store_reports");
   await clearTable("operation_submissions");
   await clearTable("store_appointments");
   await clearTable("design_assets");
@@ -502,6 +537,7 @@ export async function writeMarketingState(state: MarketingState) {
   );
   await upsertRows("store_appointments", state.storeAppointments.map(fromAppointment));
   await upsertRows("operation_submissions", state.operationSubmissions.map(fromOperationSubmission));
+  await upsertRows("store_reports", (state.storeReports ?? []).map(fromStoreReport));
   await upsertRows(
     "material_task_statuses",
     Object.entries(state.materialTaskStatuses).map(([taskId, status]) => ({ task_id: taskId, status })),
@@ -599,6 +635,11 @@ export async function applyMarketingStateDelta(delta: MarketingStateDelta) {
       delta.operationSubmissions.upserts.map(fromOperationSubmission)
     );
     await deleteByIds("operation_submissions", delta.operationSubmissions.deleteIds);
+  }
+
+  if (delta.storeReports) {
+    await upsertRows("store_reports", delta.storeReports.upserts.map(fromStoreReport));
+    await deleteByIds("store_reports", delta.storeReports.deleteIds);
   }
 
   if (delta.materialTaskStatuses) {
