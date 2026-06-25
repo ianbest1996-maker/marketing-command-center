@@ -4310,3 +4310,179 @@ button:disabled {
     width: 100%;
   }
 }
+
+/* ===================== 移动端整体优化（追加，优先级最高） ===================== */
+@media (max-width: 1100px) {
+  /* 侧边栏 → 顶部粘性导航条，随时可切页面 */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    height: auto;
+    padding: 10px 14px;
+    gap: 10px;
+    box-shadow: 0 6px 16px rgba(2, 6, 23, 0.22);
+  }
+
+  .sidebar > div:first-child {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .sidebar .eyebrow {
+    margin: 0;
+    font-size: 11px;
+  }
+
+  .sidebar h1 {
+    font-size: 17px;
+  }
+
+  .nav-list {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .nav-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-item {
+    flex: 0 0 auto;
+    width: auto;
+    white-space: nowrap;
+    padding: 8px 13px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .nav-item.active {
+    background: #2563eb;
+    color: #fff;
+    border-color: transparent;
+  }
+}
+
+@media (max-width: 760px) {
+  /* 关键：输入控件 16px，避免 iOS 聚焦时自动放大 */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .workspace {
+    padding: 12px;
+  }
+
+  .topbar {
+    margin-bottom: 14px;
+  }
+
+  .topbar-actions {
+    gap: 8px;
+  }
+
+  .topbar-actions .user-chip {
+    font-size: 12px;
+  }
+
+  /* 主要操作按钮加大点按区域 */
+  .primary,
+  .node-actions button,
+  .topbar-actions button,
+  .modal-actions button,
+  .slot-choice-row button {
+    min-height: 44px;
+  }
+
+  /* 指标卡 2 列更紧凑 */
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .metric-card {
+    padding: 12px;
+  }
+
+  .metric-card strong {
+    font-size: 22px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  /* 弹窗 → 底部抽屉式，接近全屏，便于单手操作 */
+  .modal-overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal-card,
+  .modal-card.appointment-modal,
+  .modal-card.design-upload-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  /* 日历窄屏适配 */
+  .daily-calendar {
+    padding: 10px;
+  }
+
+  .daily-calendar-grid,
+  .daily-calendar-weekdays {
+    gap: 4px;
+  }
+
+  .daily-cal-day {
+    min-height: 40px;
+    font-size: 15px;
+  }
+
+  /* 操作按钮组整行排布、便于点按 */
+  .node-actions {
+    width: 100%;
+  }
+
+  .node-actions button {
+    flex: 1 1 120px;
+  }
+
+  /* 设计审核上传图改为更适合手机的尺寸 */
+  .uploaded-file-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .metric-grid {
+    gap: 8px;
+  }
+
+  .metric-card strong {
+    font-size: 20px;
+  }
+
+  .topbar h2 {
+    font-size: 22px;
+  }
+
+  .daily-cal-day {
+    min-height: 36px;
+    font-size: 14px;
+  }
+
+  .nav-item {
+    padding: 7px 11px;
+  }
+}
