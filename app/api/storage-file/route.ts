@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/server/session";
+import { cosPresignedUrl, isCosConfigured } from "@/server/cosClient";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,12 @@ export async function GET(request: Request) {
 
     if (!path || path.includes("..")) {
       return NextResponse.json({ error: "文件路径无效" }, { status: 400 });
+    }
+
+    // 国内：腾讯云 COS —— 生成临时签名地址并重定向，文件不经过本服务。
+    if (isCosConfigured()) {
+      const signedUrl = await cosPresignedUrl(path, "GET");
+      return NextResponse.redirect(signedUrl);
     }
 
     const { url, serviceRoleKey } = getSupabaseConfig();

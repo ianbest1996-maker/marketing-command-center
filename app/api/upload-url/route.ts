@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/server/session";
+import { cosPresignedUrl, isCosConfigured } from "@/server/cosClient";
 
 export const dynamic = "force-dynamic";
 
@@ -34,37 +35,42 @@ function encodeStoragePath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
-// 签发「直传地址」：浏览器拿到后把文件字节直接 PUT 到 Supabase Storage，
-// 不再经过 Vercel 函数，从而绕开 ~4.5MB 的 Serverless 请求体上限。
+// 签发「直传地址」：浏览器拿到后把文件字节直接 PUT 到对象存储（COS 或 Supabase），
+// 不经过本服务进程，从而避免请求体大小限制。
 export async function POST(request: Request) {
   if (!getSessionFromRequest(request)) {
     return NextResponse.json({ error: "未登录或登录已过期。" }, { status: 401 });
   }
 
+  let body: { fileName?: unknown; activityId?: unknown; area?: unknown };
   try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "请求格式不正确。" }, { status: 400 });
+  }
+
+  const fileName = typeof body.fileName === "string" ? body.fileName : "";
+  if (!fileName) {
+    return NextResponse.json({ error: "缺少文件名。" }, { status: 400 });
+  }
+
+  const activityId = safePathPart(String(body.activityId ?? "general")) || "general";
+  const area = safePathPart(String(body.area ?? "misc")) || "misc";
+  const timestamp = Date.now();
+  const randomPart = Math.random().toString(36).slice(2, 10);
+  const objectPath = `${area}/${activityId}/${timestamp}-${randomPart}${getSafeExtension(fileName)}`;
+  const fileUrl = `/api/storage-file?path=${encodeURIComponent(objectPath)}`;
+
+  try {
+    // 国内：腾讯云 COS 直传
+    if (isCosConfigured()) {
+      const uploadUrl = await cosPresignedUrl(objectPath, "PUT");
+      return NextResponse.json({ uploadUrl, path: objectPath, fileUrl });
+    }
+
+    // 默认：Supabase Storage 直传
     const { url, serviceRoleKey } = getSupabaseConfig();
-
-    let body: { fileName?: unknown; activityId?: unknown; area?: unknown };
-    try {
-      body = (await request.json()) as typeof body;
-    } catch {
-      return NextResponse.json({ error: "请求格式不正确。" }, { status: 400 });
-    }
-
-    const fileName = typeof body.fileName === "string" ? body.fileName : "";
-    if (!fileName) {
-      return NextResponse.json({ error: "缺少文件名。" }, { status: 400 });
-    }
-
-    const activityId = safePathPart(String(body.activityId ?? "general")) || "general";
-    const area = safePathPart(String(body.area ?? "misc")) || "misc";
     const bucket = process.env.SUPABASE_STORAGE_BUCKET || DEFAULT_BUCKET;
-
-    const timestamp = Date.now();
-    const randomPart = Math.random().toString(36).slice(2, 10);
-    const storageFileName = `${timestamp}-${randomPart}${getSafeExtension(fileName)}`;
-    const objectPath = `${area}/${activityId}/${storageFileName}`;
-
     const signResponse = await fetch(
       `${url}/storage/v1/object/upload/sign/${encodeURIComponent(bucket)}/${encodeStoragePath(objectPath)}`,
       {
@@ -92,7 +98,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       uploadUrl: `${url}/storage/v1${signed.url}`,
       path: objectPath,
-      fileUrl: `/api/storage-file?path=${encodeURIComponent(objectPath)}`
+      fileUrl
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "未知错误";

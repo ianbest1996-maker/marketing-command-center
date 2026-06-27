@@ -93,9 +93,11 @@ export function getSessionFromRequest(request: Request): SessionPayload | null {
   return verifySessionToken(token);
 }
 
+// 默认在生产环境用 Secure cookie（仅 HTTPS）。
+// 用 IP + http 内测时设 COOKIE_INSECURE=1，允许非 HTTPS 下登录；上了 HTTPS 域名再去掉。
 export const sessionCookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
+  secure: process.env.COOKIE_INSECURE === "1" ? false : process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
   path: "/",
   maxAge: SESSION_MAX_AGE_SECONDS

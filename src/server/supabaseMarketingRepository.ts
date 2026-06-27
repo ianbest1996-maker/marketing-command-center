@@ -28,6 +28,15 @@ class SupabaseConfigError extends Error {
   }
 }
 
+import {
+  isPgConfigured,
+  pgClearTable,
+  pgDeleteByColumn,
+  pgDeleteByIds,
+  pgReadTable,
+  pgUpsert
+} from "./pgClient";
+
 type AnyRow = Record<string, unknown>;
 
 function getSupabaseConfig() {
@@ -68,10 +77,12 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
 }
 
 async function readTable<T extends AnyRow>(table: string, order = "id.asc") {
+  if (isPgConfigured()) return pgReadTable<T>(table, order);
   return supabaseRequest<T[]>(`${table}?select=*&order=${order}`);
 }
 
 async function clearTable(table: string, key = "id") {
+  if (isPgConfigured()) return pgClearTable(table);
   await supabaseRequest(`${table}?${key}=neq.__never__`, {
     method: "DELETE",
     headers: { Prefer: "return=minimal" }
@@ -81,6 +92,7 @@ async function clearTable(table: string, key = "id") {
 async function upsertRows(table: string, rows: AnyRow[], onConflict = "id") {
   if (rows.length === 0) return;
 
+  if (isPgConfigured()) return pgUpsert(table, rows, onConflict);
   await supabaseRequest(`${table}?on_conflict=${encodeURIComponent(onConflict)}`, {
     method: "POST",
     headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
@@ -88,11 +100,21 @@ async function upsertRows(table: string, rows: AnyRow[], onConflict = "id") {
   });
 }
 
-// 按 id 删除指定行（PostgREST 的 in 过滤），不再整表清空。
+// 按 id 删除指定行，不再整表清空。
 async function deleteByIds(table: string, ids: string[], column = "id") {
   if (ids.length === 0) return;
+  if (isPgConfigured()) return pgDeleteByIds(table, column, ids);
   const list = ids.map((id) => encodeURIComponent(id)).join(",");
   await supabaseRequest(`${table}?${column}=in.(${list})`, {
+    method: "DELETE",
+    headers: { Prefer: "return=minimal" }
+  });
+}
+
+// 按某列等值删除（用于重排活动-门店、灵感-品牌等关联）。
+async function deleteByColumn(table: string, column: string, value: string) {
+  if (isPgConfigured()) return pgDeleteByColumn(table, column, value);
+  await supabaseRequest(`${table}?${column}=eq.${encodeURIComponent(value)}`, {
     method: "DELETE",
     headers: { Prefer: "return=minimal" }
   });
@@ -430,7 +452,9 @@ function fromIdea(idea: Idea): AnyRow {
   };
 }
 
+// 数据源是否就绪：配置了 PostgreSQL（国内自建）或 Supabase 任一即可。
 export function isSupabaseConfigured() {
+  if (isPgConfigured()) return true;
   try {
     getSupabaseConfig();
     return true;
@@ -555,10 +579,7 @@ export async function writeMarketingState(state: MarketingState) {
 
 // 重新同步某个活动的门店关联（只动这一个活动的 join 行，互不影响）。
 async function resyncActivityStores(activity: Activity) {
-  await supabaseRequest(
-    `activity_stores?activity_id=eq.${encodeURIComponent(activity.id)}`,
-    { method: "DELETE", headers: { Prefer: "return=minimal" } }
-  );
+  await deleteByColumn("activity_stores", "activity_id", activity.id);
   await upsertRows(
     "activity_stores",
     activity.storeIds.map((storeId) => ({ activity_id: activity.id, store_id: storeId })),
@@ -568,10 +589,7 @@ async function resyncActivityStores(activity: Activity) {
 
 // 重新同步某条灵感的品牌关联。
 async function resyncIdeaBrands(idea: Idea) {
-  await supabaseRequest(`idea_brands?idea_id=eq.${encodeURIComponent(idea.id)}`, {
-    method: "DELETE",
-    headers: { Prefer: "return=minimal" }
-  });
+  await deleteByColumn("idea_brands", "idea_id", idea.id);
   await upsertRows(
     "idea_brands",
     idea.brands.map((brand) => ({ idea_id: idea.id, brand })),
