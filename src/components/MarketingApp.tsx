@@ -25,7 +25,9 @@ import type {
 } from "@/types";
 import { computeMarketingStateDelta, isEmptyDelta } from "@/lib/marketingDelta";
 
-const DEMO_TODAY = "2026-06-21";
+// 系统「今天」：按北京时间取真实当天日期（此前为固定演示日期，会导致延误监控、
+// 临期判断、日历和每日数据填报全部冻结在演示日）。页面加载时取一次。
+const TODAY = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai" }).format(new Date());
 const STORAGE_KEY = "marketing-command-center-local-state-v4-boss-store-cleanup";
 const USER_STORAGE_KEY = "marketing-command-center-current-user-v1";
 const MONTHLY_MARKETING_BUDGET = 220000;
@@ -313,7 +315,7 @@ function MaterialArrivalDialog({
   const targetStores = activity
     ? (activity.storeIds.map((id) => stores.find((store) => store.id === id)).filter(Boolean) as Store[])
     : [];
-  const [pickupDate, setPickupDate] = useState(() => addDays(DEMO_TODAY, 1));
+  const [pickupDate, setPickupDate] = useState(() => addDays(TODAY, 1));
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -332,7 +334,7 @@ function MaterialArrivalDialog({
           <input
             type="date"
             value={pickupDate}
-            min={DEMO_TODAY}
+            min={TODAY}
             onChange={(event) => setPickupDate(event.target.value)}
           />
         </label>
@@ -430,7 +432,7 @@ function createLaunchPlanRequestTask(activity: Activity, allTasks: Task[]): Task
     title: `审核通过：${LAUNCH_PLAN_TASK_MARKER}并分发任务`,
     type: "规划",
     owner: getActivityOwner(activity),
-    dueDate: addDays(DEMO_TODAY, 1),
+    dueDate: addDays(TODAY, 1),
     status: "等待处理",
     standard: "老板已通过项目提案。请品牌项目总拆解活动任务，填写各节点截止日期和各部门配合内容后提交分发。",
     isKey: true
@@ -539,11 +541,13 @@ function escapeIcsText(value: string) {
 function parseAppointmentSlot(slot: string) {
   const match = slot.match(/(\d{2})-(\d{2})\s+(\d{2}):(\d{2})-(\d{2}):(\d{2})/);
   if (!match) {
-    return { start: "20260623T100000", end: "20260623T110000" };
+    // 候选时间解析失败时，兜底用明天 10:00-11:00。
+    const fallback = addDays(TODAY, 1).replace(/-/g, "");
+    return { start: `${fallback}T100000`, end: `${fallback}T110000` };
   }
 
   const [, month, day, startHour, startMinute, endHour, endMinute] = match;
-  const year = DEMO_TODAY.slice(0, 4);
+  const year = TODAY.slice(0, 4);
   return {
     start: `${year}${month}${day}T${startHour}${startMinute}00`,
     end: `${year}${month}${day}T${endHour}${endMinute}00`
@@ -564,7 +568,7 @@ function appointmentCalendarHref(
     "CALSCALE:GREGORIAN",
     "BEGIN:VEVENT",
     `UID:${appointment.id}@marketing-command-center.local`,
-    `DTSTAMP:${DEMO_TODAY.replaceAll("-", "")}T000000`,
+    `DTSTAMP:${TODAY.replaceAll("-", "")}T000000`,
     `DTSTART:${start}`,
     `DTEND:${end}`,
     `SUMMARY:${escapeIcsText(`${appointment.type}：${appointment.title}`)}`,
@@ -901,7 +905,7 @@ function evaluateNode(
 ): NodeState {
   if (done) return "已完成";
   if (waiting || !active) return "未开始";
-  if (dueDate < DEMO_TODAY) return "延误";
+  if (dueDate < TODAY) return "延误";
   return "进行中";
 }
 
@@ -1022,11 +1026,11 @@ function getMonitorNodes(
       {
         label: "节点排期和任务分发",
         owner: getActivityOwner(activity),
-        dueDate: launchPlanTask?.dueDate ?? addDays(DEMO_TODAY, 1),
+        dueDate: launchPlanTask?.dueDate ?? addDays(TODAY, 1),
         state: evaluateNode(
           launchPlanTask?.status === "已完成",
           Boolean(launchPlanTask) && launchPlanTask?.status !== "已完成",
-          launchPlanTask?.dueDate ?? addDays(DEMO_TODAY, 1),
+          launchPlanTask?.dueDate ?? addDays(TODAY, 1),
           !statusReached(activity, afterApproval)
         ),
         reminder: statusReached(activity, afterApproval)
@@ -1103,7 +1107,7 @@ function getMonitorNodes(
       dueDate: activity.endDate,
       state: evaluateNode(
         statusReached(activity, afterActive),
-        activity.status === "活动进行中" || (activity.startDate <= DEMO_TODAY && activity.endDate >= DEMO_TODAY),
+        activity.status === "活动进行中" || (activity.startDate <= TODAY && activity.endDate >= TODAY),
         activity.endDate,
         activity.status === "门店执行准备"
       ),
@@ -1333,7 +1337,7 @@ export function MarketingApp() {
   );
   const [brandFilter, setBrandFilter] = useState<"全部" | Brand>("全部");
   const [workView, setWorkView] = useState<WorkView>("老板");
-  const [month, setMonth] = useState(6);
+  const [month, setMonth] = useState(Number(TODAY.slice(5, 7)));
   const [selectedActivityId, setSelectedActivityId] = useState("a1");
   const [draggingActivityId, setDraggingActivityId] = useState<string | null>(null);
   const [materialArrivalTaskId, setMaterialArrivalTaskId] = useState<string | null>(null);
@@ -1741,10 +1745,10 @@ export function MarketingApp() {
 
   const dashboard = useMemo(() => {
     const scopedActivityIds = new Set(filteredActivities.map((item) => item.id));
-    const thisMonth = filteredActivities.filter((item) => item.startDate.startsWith("2026-06"));
+    const thisMonth = filteredActivities.filter((item) => item.startDate.startsWith(TODAY.slice(0, 7)));
     const pendingReviews = filteredActivities.filter((item) => needsBossReview(item.status));
     const overdueTasks = tasks.filter(
-      (item) => scopedActivityIds.has(item.activityId) && item.status !== "已完成" && item.dueDate < DEMO_TODAY
+      (item) => scopedActivityIds.has(item.activityId) && item.status !== "已完成" && item.dueDate < TODAY
     );
     const dataRequiredStatuses: ActivityStatus[] = ["活动进行中", "数据收集中", "待复盘"];
     const unsubmittedStores = filteredActivities
@@ -1756,15 +1760,15 @@ export function MarketingApp() {
 
     return {
       thisMonthCount: thisMonth.length,
-      upcomingCount: filteredActivities.filter((item) => item.startDate >= DEMO_TODAY && item.status !== "已完成").length,
+      upcomingCount: filteredActivities.filter((item) => item.startDate >= TODAY && item.status !== "已完成").length,
       pendingReviewCount: pendingReviews.length,
       overdueTaskCount: overdueTasks.length,
       unsubmittedStores,
       monthlyBudget: brandFilter === "全部" ? MONTHLY_MARKETING_BUDGET : Math.round(MONTHLY_MARKETING_BUDGET / 3),
       monthlyActivityBudget: thisMonth.reduce((sum, item) => sum + item.budget, 0),
       monthlyActualCost: thisMonth.reduce((sum, item) => sum + item.actualCost, 0),
-      yearlyBudget: filteredActivities.filter((item) => item.startDate.startsWith("2026")).reduce((sum, item) => sum + item.budget, 0),
-      yearlyActual: filteredActivities.filter((item) => item.startDate.startsWith("2026")).reduce((sum, item) => sum + item.actualCost, 0)
+      yearlyBudget: filteredActivities.filter((item) => item.startDate.startsWith(TODAY.slice(0, 4))).reduce((sum, item) => sum + item.budget, 0),
+      yearlyActual: filteredActivities.filter((item) => item.startDate.startsWith(TODAY.slice(0, 4))).reduce((sum, item) => sum + item.actualCost, 0)
     };
   }, [filteredActivities, tasks]);
 
@@ -1873,7 +1877,7 @@ export function MarketingApp() {
         title: `老板审核：${nextActivity.name}`,
         type: "审核",
         owner: getBossName(),
-        dueDate: addDays(DEMO_TODAY, 1),
+        dueDate: addDays(TODAY, 1),
         status: "等待处理",
         standard: "老板通过或驳回项目提报，确认预算和活动方向。",
         isKey: true
@@ -1882,6 +1886,57 @@ export function MarketingApp() {
     setSelectedActivityId(nextActivity.id);
     setActiveNav("活动详情");
     notifySubmitted("项目提报已提交，等待老板审核");
+  }
+
+  // 老板驳回的提案：品牌负责人按意见就地修改后重新提交（不再新建重复项目）。
+  function resubmitActivityProposal(
+    activityId: string,
+    updates: Pick<Activity, "name" | "startDate" | "endDate" | "budget" | "goal" | "plan" | "storeIds">
+  ) {
+    const activity = activities.find((item) => item.id === activityId);
+    if (!activity || !currentUser || !canManageActivity(currentUser, activity)) return;
+
+    setActivities((current) =>
+      current.map((item) =>
+        item.id === activityId
+          ? {
+              ...item,
+              ...updates,
+              prepStartDate: addDays(
+                updates.startDate,
+                item.scale === "大型活动" ? -60 : item.scale === "普通活动" ? -30 : -14
+              ),
+              status: "待老板审核"
+            }
+          : item
+      )
+    );
+    setTasks((current) => [
+      ...current,
+      {
+        id: nextTaskId(current),
+        activityId,
+        title: `老板审核：${updates.name}`,
+        type: "审核",
+        owner: getBossName(),
+        dueDate: addDays(TODAY, 1),
+        status: "等待处理",
+        standard: "品牌负责人已按驳回意见修改提案，请老板重新审核预算和活动方向。",
+        isKey: true
+      }
+    ]);
+    notifySubmitted("提案已重新提交，等待老板审核");
+  }
+
+  // 取老板对某活动最近一次的驳回意见（记录在老板审核任务的说明里）。
+  function getProposalRejectComment(activityId: string) {
+    const rejectTasks = tasks.filter(
+      (task) => task.activityId === activityId && isBossReviewTask(task) && task.standard.includes("驳回修改意见")
+    );
+    const latest = rejectTasks[rejectTasks.length - 1];
+    if (!latest) return "";
+    const index = latest.standard.indexOf("驳回修改意见：");
+    return index >= 0 ? latest.standard.slice(index + "驳回修改意见：".length) : latest.standard;
   }
 
   function submitIdea(input: IdeaInput) {
@@ -1900,7 +1955,7 @@ export function MarketingApp() {
 
     const userBrand = getUserDefaultBrand(currentUser);
     const brand = idea.brands[0] ?? (userBrand === "全部" ? "中餐" : userBrand);
-    const startDate = addDays(DEMO_TODAY, 14);
+    const startDate = addDays(TODAY, 14);
     const endDate = addDays(startDate, 7);
 
     submitActivityProposal({
@@ -1912,7 +1967,7 @@ export function MarketingApp() {
       owner: currentUser.name,
       startDate,
       endDate,
-      prepStartDate: DEMO_TODAY,
+      prepStartDate: TODAY,
       goal: idea.suggestion,
       plan: `来源平台：${idea.platform}\n来源链接：${idea.url || "未填写"}\n初步建议：${idea.suggestion}`,
       budget: idea.budget
@@ -1927,7 +1982,7 @@ export function MarketingApp() {
       ...input,
       id: `sa${storeAppointments.length + 1}`,
       status: "待店长选择",
-      createdAt: DEMO_TODAY
+      createdAt: TODAY
     };
     setStoreAppointments((current) => [nextAppointment, ...current]);
     notifySubmitted("拍摄/直播需求已发给门店");
@@ -1960,7 +2015,7 @@ export function MarketingApp() {
       ...input,
       id: `op${operationSubmissions.length + 1}`,
       status: "待项目总审核",
-      submittedAt: DEMO_TODAY
+      submittedAt: TODAY
     };
     setOperationSubmissions((current) => [nextSubmission, ...current]);
     notifySubmitted("运营提报已提交，等待项目总审核");
@@ -1978,7 +2033,7 @@ export function MarketingApp() {
               ...updates,
               status: "待项目总审核",
               reviewComment: undefined,
-              submittedAt: DEMO_TODAY
+              submittedAt: TODAY
             }
           : submission
       )
@@ -2114,7 +2169,7 @@ export function MarketingApp() {
   function updateMaterialTaskStatus(taskId: string, status: MaterialProductionStatus, pickupDate?: string) {
     const materialTask = tasks.find((task) => task.id === taskId);
     const activity = materialTask ? activities.find((item) => item.id === materialTask.activityId) : undefined;
-    const arrivalPickupDate = pickupDate || addDays(DEMO_TODAY, 1);
+    const arrivalPickupDate = pickupDate || addDays(TODAY, 1);
 
     setMaterialTaskStatuses((current) => ({ ...current, [taskId]: status }));
     setTasks((current) => {
@@ -2174,7 +2229,7 @@ export function MarketingApp() {
         title: `直播商品图设计：${submission.title}`,
         type: "设计",
         owner: DESIGN_OWNER_NAME,
-        dueDate: addDays(DEMO_TODAY, 2),
+        dueDate: addDays(TODAY, 2),
         status: "待开始",
         standard: submission.designRequest || "运营需要直播商品图，请根据直播计划设计商品图。",
         isKey: true
@@ -2194,7 +2249,7 @@ export function MarketingApp() {
               ...asset,
               status: "已通过",
               reviewer: "项目总",
-              reviewedAt: DEMO_TODAY,
+              reviewedAt: TODAY,
               reviewComment: "项目总审核通过，可以进入物料制作。"
             }
           : asset
@@ -2224,7 +2279,7 @@ export function MarketingApp() {
               ...item,
               status: "驳回修改",
               reviewer: "项目总",
-              reviewedAt: DEMO_TODAY,
+              reviewedAt: TODAY,
               reviewComment: cleanComment,
               version: item.version + 1
             }
@@ -2239,7 +2294,7 @@ export function MarketingApp() {
         title: `修改设计：${asset.title}`,
         type: "设计",
         owner: asset.designer,
-        dueDate: addDays(DEMO_TODAY, 2),
+        dueDate: addDays(TODAY, 2),
         status: "待开始",
         standard: cleanComment,
         isKey: true
@@ -2260,7 +2315,7 @@ export function MarketingApp() {
         designer: DESIGN_OWNER_NAME,
         version: 1,
         status: "待老板审核",
-        submittedAt: DEMO_TODAY,
+        submittedAt: TODAY,
         previewTitle: input.title,
         previewSubtitle: input.purpose,
         previewCta: input.type
@@ -2348,8 +2403,8 @@ export function MarketingApp() {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <span>演示日期</span>
-          <strong>{DEMO_TODAY}</strong>
+          <span>今天</span>
+          <strong>{TODAY}</strong>
         </div>
       </aside>
 
@@ -2513,6 +2568,8 @@ export function MarketingApp() {
             submitOperationSubmission={submitOperationSubmission}
             submitOperationCompletionReview={submitOperationCompletionReview}
             resubmitOperationSubmission={resubmitOperationSubmission}
+            resubmitActivityProposal={resubmitActivityProposal}
+            getProposalRejectComment={getProposalRejectComment}
             approveOperationSubmission={approveOperationSubmission}
             rejectOperationSubmission={rejectOperationSubmission}
             requestDesignForOperation={requestDesignForOperation}
@@ -2967,8 +3024,8 @@ function ProposalPage({
   const [name, setName] = useState("暑期升学宴推广");
   const [brand, setBrand] = useState<Brand>(initialBrand);
   const [scale, setScale] = useState<Activity["scale"]>("普通活动");
-  const [startDate, setStartDate] = useState("2026-07-15");
-  const [endDate, setEndDate] = useState("2026-08-20");
+  const [startDate, setStartDate] = useState(addDays(TODAY, 21));
+  const [endDate, setEndDate] = useState(addDays(TODAY, 51));
   const [budget, setBudget] = useState(70000);
   const [goal, setGoal] = useState("获取暑期升学宴、谢师宴预订线索，提升包间预订。");
   const [plan, setPlan] = useState("选择核心门店测试套餐，短视频展示包间、菜品和服务仪式感。");
@@ -3479,7 +3536,7 @@ function Dashboard({
 
 function BrandComparisonChart({ activities }: { activities: Activity[] }) {
   const brandStats = (["中餐", "火锅", "虾锅"] as Brand[]).map((brand) => {
-    const brandActivities = activities.filter((activity) => activity.brand === brand && activity.startDate.startsWith("2026-06"));
+    const brandActivities = activities.filter((activity) => activity.brand === brand && activity.startDate.startsWith(TODAY.slice(0, 7)));
     const completedCount = brandActivities.filter((activity) => activity.status === "已完成").length;
     const brandActivityIds = new Set(activities.filter((activity) => activity.brand === brand).map((activity) => activity.id));
     const brandReports = storeReports.filter((report) => brandActivityIds.has(report.activityId));
@@ -3741,17 +3798,22 @@ function RoleWorkbench({
     );
     const pendingLaunchActivities = brandActivities.filter((activity) => activity.status === "已通过待启动");
     const launchPendingCount = pendingLaunchActivities.length;
+    const rejectedProposalCount = brandActivities.filter((activity) => activity.status === "驳回修改").length;
     return (
       <section className="role-workspace">
-        {(pendingOperationReviews.length > 0 || launchPendingCount > 0) && (
+        {(pendingOperationReviews.length > 0 || launchPendingCount > 0 || rejectedProposalCount > 0) && (
           <div className="approval-alert">
             <span className="approval-alert-icon" aria-hidden>🔔</span>
             <div>
-              <strong>有待你处理的审批</strong>
+              <strong>有待你处理的事项</strong>
               <p>
-                {pendingOperationReviews.length > 0 && `${pendingOperationReviews.length} 项运营提报待审核/复核`}
-                {pendingOperationReviews.length > 0 && launchPendingCount > 0 && "；"}
-                {launchPendingCount > 0 && `${launchPendingCount} 个项目待排期下派`}
+                {[
+                  pendingOperationReviews.length > 0 && `${pendingOperationReviews.length} 项运营提报待审核/复核`,
+                  launchPendingCount > 0 && `${launchPendingCount} 个项目待排期下派`,
+                  rejectedProposalCount > 0 && `${rejectedProposalCount} 个提案被老板驳回（到「我的任务」修改重提）`
+                ]
+                  .filter(Boolean)
+                  .join("；")}
                 。
               </p>
             </div>
@@ -4160,13 +4222,13 @@ function LaunchPlanPanel({
 
 function getEmptyLaunchPlan(): Omit<LaunchPlanInput, "activityId"> {
   return {
-    kickoffDueDate: DEMO_TODAY,
-    designDueDate: DEMO_TODAY,
-    materialDueDate: DEMO_TODAY,
-    contentDueDate: DEMO_TODAY,
-    storeDueDate: DEMO_TODAY,
-    dataDueDate: DEMO_TODAY,
-    reviewDueDate: DEMO_TODAY,
+    kickoffDueDate: TODAY,
+    designDueDate: TODAY,
+    materialDueDate: TODAY,
+    contentDueDate: TODAY,
+    storeDueDate: TODAY,
+    dataDueDate: TODAY,
+    reviewDueDate: TODAY,
     designTaskTitle: "活动主视觉、菜单和门店物料设计",
     contentTaskTitle: "短视频、直播、达人和投流节点提报",
     designPurpose: "门店海报、菜单夹页、抖音商家页、社群转发图和门店物料。",
@@ -4296,7 +4358,7 @@ function DesignerWorkbench({
   const materialInProgress = materialTasks.filter(
     (task) => getMaterialProductionStatus(task, materialTaskStatuses) !== "物料到货"
   ).length;
-  const urgentTasks = tasks.filter((task) => task.status !== "已完成" && daysBetween(DEMO_TODAY, task.dueDate) <= 3).length;
+  const urgentTasks = tasks.filter((task) => task.status !== "已完成" && daysBetween(TODAY, task.dueDate) <= 3).length;
 
   return (
     <section className="role-workspace designer-workbench">
@@ -4540,7 +4602,7 @@ function DesignerDeadlineChart({ tasks, activities }: { tasks: Task[]; activitie
   const deadlineRows = tasks
     .filter((task) => task.status !== "已完成")
     .map((task) => {
-      const daysLeft = daysBetween(DEMO_TODAY, task.dueDate);
+      const daysLeft = daysBetween(TODAY, task.dueDate);
       const activity = activities.find((item) => item.id === task.activityId);
       const urgency = daysLeft < 0 ? "overdue" : daysLeft <= 3 ? "soon" : "normal";
       return {
@@ -4600,7 +4662,7 @@ function MaterialQuotePanel({
   const selectedActivity = activities.find((activity) => activity.id === selectedTask?.activityId);
   const [supplier, setSupplier] = useState("忻州快印工场");
   const [materialName, setMaterialName] = useState("桌面台卡 / 门店海报");
-  const [deadline, setDeadline] = useState(selectedTask?.dueDate ?? DEMO_TODAY);
+  const [deadline, setDeadline] = useState(selectedTask?.dueDate ?? TODAY);
   const [amount, setAmount] = useState(12000);
   const [note, setNote] = useState("包含设计文件制作、打样、印刷和同城配送。");
 
@@ -5556,7 +5618,7 @@ function StoreManagerWorkbench({
   const activeTasks = tasks
     .filter((task) => task.status !== "已完成")
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const urgentTasks = activeTasks.filter((task) => task.dueDate <= addDays(DEMO_TODAY, 3));
+  const urgentTasks = activeTasks.filter((task) => task.dueDate <= addDays(TODAY, 3));
 
   return (
     <section className="role-workspace">
@@ -5691,7 +5753,7 @@ function StoreDailyDataPanel({
   const [activityId, setActivityId] = useState(storeActivities[0]?.id ?? "");
   const selectedActivity = storeActivities.find((activity) => activity.id === activityId) ?? storeActivities[0];
   const reportItems = getActivityReportItems(selectedActivity);
-  const [reportDate, setReportDate] = useState(DEMO_TODAY);
+  const [reportDate, setReportDate] = useState(TODAY);
   const [itemValues, setItemValues] = useState<Record<string, { quantity: string; amount: string }>>({});
   const [visits, setVisits] = useState("");
   const [note, setNote] = useState("");
@@ -5744,7 +5806,7 @@ function StoreDailyDataPanel({
     if (!periodStart || !periodEnd) return;
     setReportDate((current) => {
       if (current >= periodStart && current <= periodEnd) return current;
-      return DEMO_TODAY >= periodStart && DEMO_TODAY <= periodEnd ? DEMO_TODAY : periodStart;
+      return TODAY >= periodStart && TODAY <= periodEnd ? TODAY : periodStart;
     });
   }, [periodStart, periodEnd]);
 
@@ -5833,7 +5895,7 @@ function StoreDailyDataPanel({
                 const className = [
                   "daily-cal-day",
                   inPeriod ? "" : "out",
-                  day === DEMO_TODAY ? "today" : "",
+                  day === TODAY ? "today" : "",
                   day === reportDate ? "selected" : "",
                   submittedDates.has(day) ? "done" : ""
                 ]
@@ -6079,13 +6141,14 @@ function CalendarView({
   moveActivityDate: (id: string, date: string) => void;
   openActivity: (id: string) => void;
 }) {
-  const days = monthDays(2026, month);
+  const calendarYear = Number(TODAY.slice(0, 4));
+  const days = monthDays(calendarYear, month);
 
   return (
     <div className="page-stack">
       <div className="filter-row">
         <button onClick={() => setMonth(Math.max(1, month - 1))}>上个月</button>
-        <strong>2026 年 {month} 月</strong>
+        <strong>{calendarYear} 年 {month} 月</strong>
         <button onClick={() => setMonth(Math.min(12, month + 1))}>下个月</button>
         <span className="calendar-note">只显示已审核通过或已进入执行链路的活动</span>
       </div>
@@ -6095,7 +6158,7 @@ function CalendarView({
         ))}
         {days.map((cell, index) => (
           <div
-            className={cell.date === DEMO_TODAY ? "calendar-cell today" : "calendar-cell"}
+            className={cell.date === TODAY ? "calendar-cell today" : "calendar-cell"}
             key={`${cell.date}-${index}`}
             onDragOver={(event) => event.preventDefault()}
             onDrop={() => {
@@ -6748,6 +6811,8 @@ function TaskView({
   submitOperationSubmission,
   submitOperationCompletionReview,
   resubmitOperationSubmission,
+  resubmitActivityProposal,
+  getProposalRejectComment,
   approveOperationSubmission,
   rejectOperationSubmission,
   requestDesignForOperation,
@@ -6774,6 +6839,11 @@ function TaskView({
     submissionId: string,
     updates: Pick<OperationSubmission, "title" | "benchmarkLinks" | "contentPlan" | "budget">
   ) => void;
+  resubmitActivityProposal: (
+    activityId: string,
+    updates: Pick<Activity, "name" | "startDate" | "endDate" | "budget" | "goal" | "plan" | "storeIds">
+  ) => void;
+  getProposalRejectComment: (activityId: string) => string;
   approveOperationSubmission: (submissionId: string, comment?: string) => void;
   rejectOperationSubmission: (submissionId: string, comment?: string) => void;
   requestDesignForOperation: (submissionId: string) => void;
@@ -6796,6 +6866,8 @@ function TaskView({
         operationSubmissions={operationSubmissions}
         currentUser={currentUser}
         submitLaunchPlan={submitLaunchPlan}
+        resubmitActivityProposal={resubmitActivityProposal}
+        getProposalRejectComment={getProposalRejectComment}
         approveOperationSubmission={approveOperationSubmission}
         rejectOperationSubmission={rejectOperationSubmission}
         openActivity={openActivity}
@@ -6913,7 +6985,7 @@ function DesignerTaskView({
   const materialPending = materialTasks.filter(
     (task) => getMaterialProductionStatus(task, materialTaskStatuses) !== "物料到货"
   );
-  const dueSoon = tasks.filter((task) => task.status !== "已完成" && daysBetween(DEMO_TODAY, task.dueDate) <= 3);
+  const dueSoon = tasks.filter((task) => task.status !== "已完成" && daysBetween(TODAY, task.dueDate) <= 3);
 
   return (
     <div className="page-stack role-task-page">
@@ -7013,7 +7085,7 @@ function StoreManagerTaskView({
   const activeTasks = tasks
     .filter((task) => task.status !== "已完成")
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const dueToday = activeTasks.filter((task) => task.dueDate <= DEMO_TODAY);
+  const dueToday = activeTasks.filter((task) => task.dueDate <= TODAY);
   const dataTasks = activeTasks.filter((task) => task.type.includes("数据") || task.title.includes("数据"));
 
   return (
@@ -7367,6 +7439,8 @@ function BrandLeadTaskView({
   operationSubmissions,
   currentUser,
   submitLaunchPlan,
+  resubmitActivityProposal,
+  getProposalRejectComment,
   approveOperationSubmission,
   rejectOperationSubmission,
   openActivity,
@@ -7377,6 +7451,11 @@ function BrandLeadTaskView({
   operationSubmissions: OperationSubmission[];
   currentUser: User;
   submitLaunchPlan: (plan: LaunchPlanInput) => void;
+  resubmitActivityProposal: (
+    activityId: string,
+    updates: Pick<Activity, "name" | "startDate" | "endDate" | "budget" | "goal" | "plan" | "storeIds">
+  ) => void;
+  getProposalRejectComment: (activityId: string) => string;
   approveOperationSubmission: (submissionId: string, comment?: string) => void;
   rejectOperationSubmission: (submissionId: string, comment?: string) => void;
   openActivity: (id: string) => void;
@@ -7385,6 +7464,9 @@ function BrandLeadTaskView({
   const brand = getUserDefaultBrand(currentUser);
   const brandActivities = activities.filter((activity) => brand === "全部" || activity.brand === brand);
   const brandActivityIds = new Set(brandActivities.map((activity) => activity.id));
+  const rejectedProposals = brandActivities.filter((activity) => activity.status === "驳回修改");
+  const [proposalResubmitId, setProposalResubmitId] = useState<string | null>(null);
+  const proposalResubmitTarget = rejectedProposals.find((activity) => activity.id === proposalResubmitId) ?? null;
   const pendingOperationReviews = operationSubmissions.filter(
     (submission) =>
       brandActivityIds.has(submission.activityId) &&
@@ -7392,9 +7474,9 @@ function BrandLeadTaskView({
   );
   const scopedTasks = tasks.filter((task) => brandActivityIds.has(task.activityId));
   const launchTasks = scopedTasks.filter((task) => task.title.includes(LAUNCH_PLAN_TASK_MARKER) && task.status !== "已完成");
-  const delayedTasks = scopedTasks.filter((task) => task.status !== "已完成" && (task.status === "已延期" || task.dueDate < DEMO_TODAY));
+  const delayedTasks = scopedTasks.filter((task) => task.status !== "已完成" && (task.status === "已延期" || task.dueDate < TODAY));
   const dueSoonTasks = scopedTasks.filter((task) => {
-    const days = daysBetween(DEMO_TODAY, task.dueDate);
+    const days = daysBetween(TODAY, task.dueDate);
     return task.status !== "已完成" && days >= 0 && days <= 3;
   });
   const activeTasks = scopedTasks.filter((task) => task.status !== "已完成");
@@ -7404,11 +7486,40 @@ function BrandLeadTaskView({
     <div className="page-stack">
       <section className="metric-grid">
         <article className="metric-card"><span>待排期分发</span><strong>{launchTasks.length}</strong></article>
+        <article className="metric-card"><span>被驳回待修改</span><strong>{rejectedProposals.length}</strong></article>
         <article className="metric-card"><span>运营待审</span><strong>{pendingOperationReviews.length}</strong></article>
         <article className="metric-card"><span>延误任务</span><strong>{delayedTasks.length}</strong></article>
         <article className="metric-card"><span>三天内到期</span><strong>{dueSoonTasks.length}</strong></article>
-        <article className="metric-card"><span>已完成</span><strong>{doneTasks.length}</strong></article>
       </section>
+
+      {rejectedProposals.length > 0 && (
+        <section className="panel">
+          <div className="panel-title">
+            <h3>老板驳回的提案</h3>
+            <span>按意见修改后重新提交，不用新建项目</span>
+          </div>
+          <div className="project-task-list">
+            {rejectedProposals.map((activity) => {
+              const comment = getProposalRejectComment(activity.id);
+              return (
+                <article className="project-task-card priority" key={activity.id}>
+                  <div>
+                    <strong>{activity.name}</strong>
+                    <span>{activity.brand} · {activity.startDate} 至 {activity.endDate} · 预算 {yuan(activity.budget)}</span>
+                    {comment && <p>老板意见：{comment}</p>}
+                  </div>
+                  <div className="node-actions">
+                    <button onClick={() => openActivity(activity.id)}>活动详情</button>
+                    <button className="primary" onClick={() => setProposalResubmitId(activity.id)}>
+                      按意见修改重提
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {pendingOperationReviews.length > 0 && (
         <OperationApprovalPanel
@@ -7477,6 +7588,129 @@ function BrandLeadTaskView({
           })}
         </div>
       </section>
+
+      {proposalResubmitTarget && (
+        <ProposalResubmitDialog
+          activity={proposalResubmitTarget}
+          rejectComment={getProposalRejectComment(proposalResubmitTarget.id)}
+          onClose={() => setProposalResubmitId(null)}
+          onSubmit={(updates) => {
+            resubmitActivityProposal(proposalResubmitTarget.id, updates);
+            setProposalResubmitId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ProposalResubmitDialog({
+  activity,
+  rejectComment,
+  onClose,
+  onSubmit
+}: {
+  activity: Activity;
+  rejectComment: string;
+  onClose: () => void;
+  onSubmit: (
+    updates: Pick<Activity, "name" | "startDate" | "endDate" | "budget" | "goal" | "plan" | "storeIds">
+  ) => void;
+}) {
+  const [name, setName] = useState(activity.name);
+  const [startDate, setStartDate] = useState(activity.startDate);
+  const [endDate, setEndDate] = useState(activity.endDate);
+  const [budget, setBudget] = useState(String(activity.budget));
+  const [goal, setGoal] = useState(activity.goal);
+  const [plan, setPlan] = useState(activity.plan);
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(activity.storeIds);
+  const brandStores = stores.filter((store) => store.brand === activity.brand);
+  const canSubmit =
+    name.trim() && selectedStoreIds.length > 0 && Number(budget) > 0 && startDate && endDate && startDate <= endDate;
+
+  function toggleStore(storeId: string) {
+    setSelectedStoreIds((current) =>
+      current.includes(storeId) ? current.filter((id) => id !== storeId) : [...current, storeId]
+    );
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card appointment-modal" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-head">
+          <h3>修改提案并重新提交</h3>
+          <button className="modal-close" type="button" onClick={onClose} aria-label="关闭">
+            ×
+          </button>
+        </div>
+        {rejectComment && (
+          <div className="modal-store-list">
+            <strong>老板驳回意见</strong>
+            <span>{rejectComment}</span>
+          </div>
+        )}
+        <div className="appointment-form">
+          <label className="full-span">
+            <span>活动名称</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} />
+          </label>
+          <label>
+            <span>开始日期</span>
+            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          </label>
+          <label>
+            <span>结束日期</span>
+            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          </label>
+          <label>
+            <span>预算（元）</span>
+            <input type="number" value={budget} onChange={(event) => setBudget(event.target.value)} />
+          </label>
+          <label className="full-span">
+            <span>活动目标</span>
+            <textarea rows={2} value={goal} onChange={(event) => setGoal(event.target.value)} />
+          </label>
+          <label className="full-span">
+            <span>活动方案</span>
+            <textarea rows={4} value={plan} onChange={(event) => setPlan(event.target.value)} />
+          </label>
+          <div className="full-span modal-store-list">
+            <strong>参与门店（{selectedStoreIds.length} 家）</strong>
+            {brandStores.map((store) => (
+              <label key={store.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={selectedStoreIds.includes(store.id)}
+                  onChange={() => toggleStore(store.id)}
+                />
+                <span>{store.name} · {store.manager}</span>
+              </label>
+            ))}
+            {brandStores.length === 0 && <span>该品牌暂无门店，请先在基础资料里维护。</span>}
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button type="button" onClick={onClose}>取消</button>
+          <button
+            className="primary"
+            type="button"
+            disabled={!canSubmit}
+            onClick={() =>
+              onSubmit({
+                name: name.trim(),
+                startDate,
+                endDate,
+                budget: Number(budget),
+                goal: goal.trim(),
+                plan: plan.trim(),
+                storeIds: selectedStoreIds
+              })
+            }
+          >
+            重新提交给老板审核
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -7550,7 +7784,7 @@ function BossReviewTaskList({
         title: `老板审核：${activity.name}`,
         type: "审核",
         owner: getBossName(),
-        dueDate: addDays(DEMO_TODAY, 1),
+        dueDate: addDays(TODAY, 1),
         status: "等待处理",
         standard: "老板通过或驳回项目提报，确认预算和活动方向。",
         isKey: true
