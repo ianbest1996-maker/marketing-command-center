@@ -262,7 +262,10 @@ function toTask(row: AnyRow): Task {
     dueDate: String(row.due_date),
     status: row.status as Task["status"],
     standard: String(row.standard),
-    isKey: Boolean(row.is_key)
+    isKey: Boolean(row.is_key),
+    reportFiles: Array.isArray(row.report_files)
+      ? row.report_files.map((file) => file as UploadedFile)
+      : []
   };
 }
 
@@ -277,7 +280,8 @@ function fromTask(task: Task): AnyRow {
     due_date: task.dueDate,
     status: task.status,
     standard: task.standard,
-    is_key: task.isKey
+    is_key: task.isKey,
+    report_files: task.reportFiles ?? []
   };
 }
 
@@ -408,7 +412,8 @@ function toStoreReport(row: AnyRow): StoreReport {
     beforeValue: Number(row.before_value),
     lastYearValue: Number(row.last_year_value),
     note: String(row.note ?? ""),
-    submittedAt: row.submitted_at ? String(row.submitted_at) : undefined
+    submittedAt: row.submitted_at ? String(row.submitted_at) : undefined,
+    files: Array.isArray(row.files) ? row.files.map((file) => file as UploadedFile) : []
   };
 }
 
@@ -423,7 +428,8 @@ function fromStoreReport(report: StoreReport): AnyRow {
     before_value: report.beforeValue,
     last_year_value: report.lastYearValue,
     note: report.note,
-    submitted_at: report.submittedAt ?? null
+    submitted_at: report.submittedAt ?? null,
+    files: report.files ?? []
   };
 }
 

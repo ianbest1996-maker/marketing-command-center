@@ -1805,6 +1805,25 @@ export function MarketingApp() {
     );
   }
 
+  // 店长提交任务汇报：说明写入任务说明、现场照片存入 reportFiles，任务标记完成。
+  function submitTaskReport(taskId: string, note: string, files: UploadedFile[]) {
+    setTasks((current) =>
+      current.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              status: "已完成" as const,
+              standard: note.trim()
+                ? `${task.standard}\n完成汇报：${note.trim()}`
+                : `${task.standard}\n已提交完成汇报。`,
+              reportFiles: [...(task.reportFiles ?? []), ...files]
+            }
+          : task
+      )
+    );
+    notifySubmitted(files.length > 0 ? `汇报已提交（${files.length} 张照片）` : "汇报已提交");
+  }
+
   function approveActivity(activityId: string) {
     const activity = activities.find((item) => item.id === activityId);
     if (!activity || currentUser?.role !== "老板") return;
@@ -2564,6 +2583,7 @@ export function MarketingApp() {
             currentUser={currentUser}
             completeTask={completeTask}
             updateTaskStatus={updateTaskStatus}
+            submitTaskReport={submitTaskReport}
             submitLaunchPlan={submitLaunchPlan}
             submitOperationSubmission={submitOperationSubmission}
             submitOperationCompletionReview={submitOperationCompletionReview}
@@ -5757,7 +5777,9 @@ function StoreDailyDataPanel({
   const [itemValues, setItemValues] = useState<Record<string, { quantity: string; amount: string }>>({});
   const [visits, setVisits] = useState("");
   const [note, setNote] = useState("");
-  const [photoNames, setPhotoNames] = useState<string[]>([]);
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const storeReportsForActivity =
     selectedActivity && currentStore
       ? storeReports
@@ -5766,6 +5788,7 @@ function StoreDailyDataPanel({
       : [];
   const canSubmit =
     Boolean(selectedActivity) &&
+    !isUploading &&
     (reportItems.some((item) => itemValues[item.key]?.quantity || itemValues[item.key]?.amount) || visits.trim() || note.trim());
   const comparisonDate = addDays(reportDate, -1);
   const comparisonRows = selectedActivity
@@ -5838,23 +5861,35 @@ function StoreDailyDataPanel({
       .filter(Boolean);
     const noteText = [summaryParts.join("；"), note.trim()].filter(Boolean).join(" ｜ ");
 
-    submitStoreReport({
-      // 同一门店+活动+日期固定 id，重复提交即覆盖更新。
-      id: `sr-${currentStore.id}-${selectedActivity.id}-${reportDate}`,
-      activityId: selectedActivity.id,
-      storeId: currentStore.id,
-      packageSales: totalQuantity,
-      revenue: totalAmount,
-      visits: Number(visits || 0),
-      beforeValue: 0,
-      lastYearValue: 0,
-      note: noteText,
-      submittedAt: reportDate
-    });
-    setItemValues({});
-    setVisits("");
-    setNote("");
-    setPhotoNames([]);
+    setIsUploading(true);
+    setUploadError("");
+    Promise.all(
+      photoFiles.map((file) => uploadMarketingFile(file, selectedActivity.id, "store-reports"))
+    )
+      .then((uploaded) => {
+        submitStoreReport({
+          // 同一门店+活动+日期固定 id，重复提交即覆盖更新。
+          id: `sr-${currentStore.id}-${selectedActivity.id}-${reportDate}`,
+          activityId: selectedActivity.id,
+          storeId: currentStore.id,
+          packageSales: totalQuantity,
+          revenue: totalAmount,
+          visits: Number(visits || 0),
+          beforeValue: 0,
+          lastYearValue: 0,
+          note: noteText,
+          submittedAt: reportDate,
+          files: uploaded
+        });
+        setItemValues({});
+        setVisits("");
+        setNote("");
+        setPhotoFiles([]);
+      })
+      .catch((error) => {
+        setUploadError(error instanceof Error ? error.message : "照片上传失败，请重试");
+      })
+      .finally(() => setIsUploading(false));
   }
 
   return (
@@ -5964,20 +5999,24 @@ function StoreDailyDataPanel({
             capture="environment"
             multiple
             type="file"
-            onChange={(event) => setPhotoNames(Array.from(event.target.files ?? []).map((file) => file.name))}
+            onChange={(event) => {
+              setPhotoFiles(Array.from(event.target.files ?? []));
+              setUploadError("");
+            }}
           />
         </label>
         <label className="full-span">
           <span>问题和顾客反馈</span>
           <textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
-        {photoNames.length > 0 && (
+        {photoFiles.length > 0 && (
           <div className="upload-preview full-span">
-            {photoNames.map((name) => <span key={name}>{name}</span>)}
+            {photoFiles.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}
           </div>
         )}
+        {uploadError && <p className="form-error light full-span">{uploadError}</p>}
         <button className="primary full-span" disabled={!canSubmit} onClick={submitDailyReport}>
-          提交今日数据
+          {isUploading ? "照片上传中..." : "提交今日数据"}
         </button>
       </div>
       <div className="daily-report-history">
@@ -5985,6 +6024,15 @@ function StoreDailyDataPanel({
         {storeReportsForActivity.length > 0 ? storeReportsForActivity.slice(0, 4).map((report) => (
           <span key={report.id}>
             {report.submittedAt} · 销量 {report.packageSales} · {yuan(report.revenue)} · 客流 {report.visits}
+            {(report.files?.length ?? 0) > 0 && (
+              <i className="report-photo-strip">
+                {report.files!.map((file) => (
+                  <a href={file.url} target="_blank" rel="noreferrer" key={file.path}>
+                    <img src={file.url} alt={file.name} />
+                  </a>
+                ))}
+              </i>
+            )}
           </span>
         )) : (
           <span>这个活动还没有提交过数据。</span>
@@ -6027,15 +6075,35 @@ function StoreDailyDataPanel({
 function StoreTaskReportCard({
   task,
   activity,
-  completeTask
+  submitTaskReport
 }: {
   task: Task;
   activity?: Activity;
-  completeTask: () => void;
+  submitTaskReport: (taskId: string, note: string, files: UploadedFile[]) => void;
 }) {
   const [reportText, setReportText] = useState("");
-  const [fileNames, setFileNames] = useState<string[]>([]);
-  const canSubmit = reportText.trim().length > 0 || fileNames.length > 0;
+  const [photoFiles, setPhotoFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const canSubmit = (reportText.trim().length > 0 || photoFiles.length > 0) && !isUploading;
+
+  async function handleSubmit() {
+    setIsUploading(true);
+    setUploadError("");
+    try {
+      const uploaded: UploadedFile[] = [];
+      for (const file of photoFiles) {
+        uploaded.push(await uploadMarketingFile(file, task.activityId, "store-reports"));
+      }
+      submitTaskReport(task.id, reportText, uploaded);
+      setReportText("");
+      setPhotoFiles([]);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "照片上传失败，请重试");
+    } finally {
+      setIsUploading(false);
+    }
+  }
 
   return (
     <article className="store-task-card">
@@ -6061,16 +6129,20 @@ function StoreTaskReportCard({
             capture="environment"
             multiple
             type="file"
-            onChange={(event) => setFileNames(Array.from(event.target.files ?? []).map((file) => file.name))}
+            onChange={(event) => {
+              setPhotoFiles(Array.from(event.target.files ?? []));
+              setUploadError("");
+            }}
           />
         </label>
-        {fileNames.length > 0 && (
+        {photoFiles.length > 0 && (
           <div className="upload-preview">
-            {fileNames.map((name) => <span key={name}>{name}</span>)}
+            {photoFiles.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}
           </div>
         )}
-        <button className="primary" disabled={!canSubmit} onClick={completeTask}>
-          提交汇报并自动完成任务
+        {uploadError && <p className="form-error light">{uploadError}</p>}
+        <button className="primary" disabled={!canSubmit} onClick={handleSubmit}>
+          {isUploading ? "照片上传中..." : "提交汇报并自动完成任务"}
         </button>
       </div>
     </article>
@@ -6807,6 +6879,7 @@ function TaskView({
   currentUser,
   completeTask,
   updateTaskStatus,
+  submitTaskReport,
   submitLaunchPlan,
   submitOperationSubmission,
   submitOperationCompletionReview,
@@ -6832,6 +6905,7 @@ function TaskView({
   currentUser: User;
   completeTask: (id: string) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
+  submitTaskReport: (taskId: string, note: string, files: UploadedFile[]) => void;
   submitLaunchPlan: (plan: LaunchPlanInput) => void;
   submitOperationSubmission: (input: OperationSubmissionInput) => void;
   submitOperationCompletionReview: (submissionId: string) => void;
@@ -6916,6 +6990,7 @@ function TaskView({
         currentUser={currentUser}
         confirmStoreAppointment={confirmStoreAppointment}
         updateTaskStatus={updateTaskStatus}
+        submitTaskReport={submitTaskReport}
         submitStoreReport={submitStoreReport}
         openActivity={openActivity}
       />
@@ -7061,6 +7136,7 @@ function StoreManagerTaskView({
   currentUser,
   confirmStoreAppointment,
   updateTaskStatus,
+  submitTaskReport,
   submitStoreReport,
   openActivity
 }: {
@@ -7070,6 +7146,7 @@ function StoreManagerTaskView({
   currentUser: User;
   confirmStoreAppointment: (appointmentId: string, selectedSlot: string) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
+  submitTaskReport: (taskId: string, note: string, files: UploadedFile[]) => void;
   submitStoreReport: (report: StoreReport) => void;
   openActivity: (id: string) => void;
 }) {
@@ -7128,7 +7205,7 @@ function StoreManagerTaskView({
                 activity={activity}
                 key={task.id}
                 task={task}
-                completeTask={() => updateTaskStatus(task.id, "已完成")}
+                submitTaskReport={submitTaskReport}
               />
             );
           }) : (
@@ -8053,6 +8130,15 @@ function ActivityDetail({
                     <strong>{store?.name}</strong>
                     <em>客流 {report.visits}</em>
                     <b>{yuan(report.revenue)}</b>
+                    {(report.files?.length ?? 0) > 0 && (
+                      <i className="report-photo-strip">
+                        {report.files!.map((file) => (
+                          <a href={file.url} target="_blank" rel="noreferrer" key={file.path}>
+                            <img src={file.url} alt={file.name} />
+                          </a>
+                        ))}
+                      </i>
+                    )}
                   </div>
                 );
               })
@@ -8062,7 +8148,33 @@ function ActivityDetail({
           </div>
         </article>
 
-        {currentUser.role === "店长" && <StoreUploadDemo activity={activity} currentUser={currentUser} />}
+        {tasks.some((task) => (task.reportFiles?.length ?? 0) > 0) && (
+          <article className="panel">
+            <div className="panel-title">
+              <h3>门店执行汇报照片</h3>
+              <span>店长提交的现场完成凭证</span>
+            </div>
+            <div className="report-evidence-list">
+              {tasks
+                .filter((task) => (task.reportFiles?.length ?? 0) > 0)
+                .map((task) => (
+                  <div className="report-evidence-row" key={task.id}>
+                    <div>
+                      <strong>{task.title}</strong>
+                      <em>{task.owner} · {task.status}</em>
+                    </div>
+                    <i className="report-photo-strip">
+                      {task.reportFiles!.map((file) => (
+                        <a href={file.url} target="_blank" rel="noreferrer" key={file.path}>
+                          <img src={file.url} alt={file.name} />
+                        </a>
+                      ))}
+                    </i>
+                  </div>
+                ))}
+            </div>
+          </article>
+        )}
 
         <article className="panel">
           <div className="panel-title">
@@ -8079,73 +8191,6 @@ function ActivityDetail({
         </article>
       </section>
     </div>
-  );
-}
-
-function StoreUploadDemo({ activity, currentUser }: { activity: Activity; currentUser: User }) {
-  const [fileNames, setFileNames] = useState<string[]>([]);
-  const managedStore = stores.find((store) => store.manager === currentUser.name);
-  const availableStoreIds =
-    managedStore && activity.storeIds.includes(managedStore.id) ? [managedStore.id] : activity.storeIds;
-  const [selectedStoreId, setSelectedStoreId] = useState(availableStoreIds[0] ?? "");
-  const selectedStore = stores.find((store) => store.id === selectedStoreId);
-
-  useEffect(() => {
-    setSelectedStoreId(availableStoreIds[0] ?? "");
-    setFileNames([]);
-  }, [activity.id, currentUser.id]);
-
-  return (
-    <article className="panel">
-      <div className="panel-title">
-        <h3>手机填报入口</h3>
-        <span>{selectedStore?.manager ?? "店长"}</span>
-      </div>
-      <div className="mobile-form">
-        <label>
-          <span>门店</span>
-          <select value={selectedStoreId} onChange={(event) => setSelectedStoreId(event.target.value)}>
-            {availableStoreIds.map((storeId) => {
-              const store = stores.find((item) => item.id === storeId);
-              return (
-                <option value={storeId} key={storeId}>
-                  {store?.name}
-                </option>
-              );
-            })}
-          </select>
-        </label>
-        <label>
-          <span>活动营业额</span>
-          <input inputMode="decimal" placeholder="例如 42800" />
-        </label>
-        <label>
-          <span>团购或套餐销量</span>
-          <input inputMode="numeric" placeholder="例如 138" />
-        </label>
-        <label>
-          <span>现场照片</span>
-          <input
-            accept="image/*"
-            capture="environment"
-            multiple
-            type="file"
-            onChange={(event) =>
-              setFileNames(Array.from(event.target.files ?? []).map((file) => file.name))
-            }
-          />
-        </label>
-        <textarea placeholder="现场执行说明、问题反馈、顾客反馈" rows={4} />
-        {fileNames.length > 0 && (
-          <div className="upload-preview">
-            {fileNames.map((name) => (
-              <span key={name}>{name}</span>
-            ))}
-          </div>
-        )}
-        <button className="primary">保存门店数据</button>
-      </div>
-    </article>
   );
 }
 

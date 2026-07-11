@@ -83,6 +83,8 @@ export interface Task {
   status: TaskStatus;
   standard: string;
   isKey: boolean;
+  // 任务完成汇报附带的照片（如门店现场照），真实存储于对象存储。
+  reportFiles?: UploadedFile[];
 }
 
 export interface DesignAsset {
@@ -116,6 +118,8 @@ export interface StoreReport {
   lastYearValue: number;
   note: string;
   submittedAt?: string;
+  // 每日数据附带的现场照片。
+  files?: UploadedFile[];
 }
 
 export type StoreContentAppointmentType = "短视频拍摄" | "直播配合";
