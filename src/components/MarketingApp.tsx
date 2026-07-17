@@ -13,6 +13,7 @@ import type {
   Idea,
   MarketingState,
   MarketingStateDelta,
+  MaterialQuote,
   OperationSubmission,
   Role,
   Store,
@@ -180,18 +181,6 @@ type IdeaInput = Omit<Idea, "id" | "status">;
 type StoreAppointmentInput = Omit<StoreContentAppointment, "id" | "status" | "createdAt">;
 
 type OperationSubmissionInput = Omit<OperationSubmission, "id" | "status" | "submittedAt">;
-
-interface MaterialQuote {
-  id: string;
-  activityId: string;
-  taskTitle: string;
-  supplier: string;
-  materialName: string;
-  deadline: string;
-  amount: number;
-  note: string;
-  status: "已记录";
-}
 
 interface MonitorNode {
   label: string;
@@ -705,6 +694,7 @@ function readSavedState() {
       storeAppointments?: StoreContentAppointment[];
       operationSubmissions?: OperationSubmission[];
       storeReports?: StoreReport[];
+      materialQuotes?: MaterialQuote[];
       costConfirmedActivityIds?: string[];
       materialTaskStatuses?: Record<string, MaterialProductionStatus>;
     };
@@ -1285,6 +1275,7 @@ function buildInitialMarketingState(): MarketingState {
     storeAppointments: [],
     operationSubmissions: [],
     storeReports: [],
+    materialQuotes: [],
     costConfirmedActivityIds: [],
     materialTaskStatuses: {}
   };
@@ -1328,6 +1319,9 @@ export function MarketingApp() {
   );
   const [storeReportsState, setStoreReports] = useState<StoreReport[]>(
     () => readSavedState()?.storeReports ?? []
+  );
+  const [materialQuotes, setMaterialQuotes] = useState<MaterialQuote[]>(
+    () => readSavedState()?.materialQuotes ?? []
   );
   const [costConfirmedActivityIds, setCostConfirmedActivityIds] = useState<string[]>(
     () => readSavedState()?.costConfirmedActivityIds ?? []
@@ -1458,6 +1452,7 @@ export function MarketingApp() {
               operationSubmissions:
                 payload.state.operationSubmissions ?? [],
               storeReports: payload.state.storeReports ?? [],
+              materialQuotes: payload.state.materialQuotes ?? [],
               costConfirmedActivityIds: payload.state.costConfirmedActivityIds ?? [],
               materialTaskStatuses: payload.state.materialTaskStatuses ?? {}
             }
@@ -1488,6 +1483,7 @@ export function MarketingApp() {
         setStoreAppointments(nextState.storeAppointments);
         setOperationSubmissions(nextState.operationSubmissions);
         setStoreReports(nextState.storeReports);
+        setMaterialQuotes(nextState.materialQuotes);
         setCostConfirmedActivityIds(nextState.costConfirmedActivityIds);
         setMaterialTaskStatuses(nextState.materialTaskStatuses as Record<string, MaterialProductionStatus>);
 
@@ -1503,6 +1499,7 @@ export function MarketingApp() {
           storeAppointments: nextState.storeAppointments,
           operationSubmissions: nextState.operationSubmissions,
           storeReports: nextState.storeReports,
+          materialQuotes: nextState.materialQuotes,
           costConfirmedActivityIds: nextState.costConfirmedActivityIds,
           materialTaskStatuses: nextState.materialTaskStatuses
         };
@@ -1543,6 +1540,7 @@ export function MarketingApp() {
       storeAppointments,
       operationSubmissions,
       storeReports: storeReportsState,
+      materialQuotes,
       costConfirmedActivityIds,
       materialTaskStatuses
     };
@@ -1576,6 +1574,7 @@ export function MarketingApp() {
     storeAppointments,
     operationSubmissions,
     storeReportsState,
+    materialQuotes,
     costConfirmedActivityIds,
     materialTaskStatuses
   ]);
@@ -2018,6 +2017,42 @@ export function MarketingApp() {
     notifySubmitted("已确认拍摄时间");
   }
 
+  // 设计部记录物料报价（云端留档）。
+  function submitMaterialQuote(quote: Omit<MaterialQuote, "id">) {
+    setMaterialQuotes((current) => [
+      { ...quote, id: `mq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` },
+      ...current
+    ]);
+    notifySubmitted("报价已记录留档");
+  }
+
+  // 项目总填写活动复盘：内容归档到活动，复盘任务完成，活动进入「已完成」。
+  function submitActivityReview(activityId: string, summary: string) {
+    const activity = activities.find((item) => item.id === activityId);
+    if (!activity || !currentUser) return;
+    if (currentUser.role !== "老板" && !canManageActivity(currentUser, activity)) return;
+
+    setActivities((current) =>
+      current.map((item) =>
+        item.id === activityId
+          ? {
+              ...item,
+              reviewSummary: summary.trim(),
+              status: ["数据收集中", "待复盘"].includes(item.status) ? ("已完成" as const) : item.status
+            }
+          : item
+      )
+    );
+    setTasks((current) =>
+      current.map((task) =>
+        task.activityId === activityId && task.type.includes("复盘") && task.status !== "已完成"
+          ? { ...task, status: "已完成" as const, standard: `${task.standard}\n复盘已归档。` }
+          : task
+      )
+    );
+    notifySubmitted("复盘已归档");
+  }
+
   // 店长每日数据：按 门店+活动+日期 唯一 id，重复提交则覆盖更新。
   function submitStoreReport(report: StoreReport) {
     setStoreReports((current) => {
@@ -2362,6 +2397,7 @@ export function MarketingApp() {
     setStoreAppointments([]);
     setOperationSubmissions([]);
     setStoreReports([]);
+    setMaterialQuotes([]);
     setCostConfirmedActivityIds([]);
     setMaterialTaskStatuses({});
     setSelectedActivityId("");
@@ -2475,6 +2511,8 @@ export function MarketingApp() {
             storeAppointments={storeAppointments}
             operationSubmissions={operationSubmissions}
             materialTaskStatuses={materialTaskStatuses}
+            materialQuotes={materialQuotes}
+            submitMaterialQuote={submitMaterialQuote}
             submitDesignUpload={submitDesignUpload}
             workView={workView}
             currentUser={currentUser}
@@ -2621,6 +2659,7 @@ export function MarketingApp() {
               operationSubmissions={operationSubmissions}
               costConfirmedActivityIds={costConfirmedActivityIds}
               confirmActivityCost={confirmActivityCost}
+              submitActivityReview={submitActivityReview}
               currentUser={currentUser}
               selectActivity={setSelectedActivityId}
             />
@@ -3316,6 +3355,8 @@ function Dashboard({
   storeAppointments,
   operationSubmissions,
   materialTaskStatuses,
+  materialQuotes,
+  submitMaterialQuote,
   submitDesignUpload,
   workView,
   currentUser,
@@ -3351,6 +3392,8 @@ function Dashboard({
   storeAppointments: StoreContentAppointment[];
   operationSubmissions: OperationSubmission[];
   materialTaskStatuses: Record<string, MaterialProductionStatus>;
+  materialQuotes: MaterialQuote[];
+  submitMaterialQuote: (quote: Omit<MaterialQuote, "id">) => void;
   submitDesignUpload: (input: DesignUploadInput) => void;
   workView: WorkView;
   currentUser: User;
@@ -3385,6 +3428,8 @@ function Dashboard({
           storeAppointments={storeAppointments}
           operationSubmissions={operationSubmissions}
           materialTaskStatuses={materialTaskStatuses}
+          materialQuotes={materialQuotes}
+          submitMaterialQuote={submitMaterialQuote}
           workView={workView}
           currentUser={currentUser}
           updateTaskStatus={updateTaskStatus}
@@ -3456,6 +3501,8 @@ function Dashboard({
           storeAppointments={storeAppointments}
           operationSubmissions={operationSubmissions}
           materialTaskStatuses={materialTaskStatuses}
+          materialQuotes={materialQuotes}
+          submitMaterialQuote={submitMaterialQuote}
           workView={workView}
           currentUser={currentUser}
           updateTaskStatus={updateTaskStatus}
@@ -3775,6 +3822,8 @@ function RoleWorkbench({
   rejectOperationSubmission,
   updateMaterialTaskStatus,
   requestDesignForOperation,
+  materialQuotes,
+  submitMaterialQuote,
   openActivity,
   goProposal,
   goTasks
@@ -3786,6 +3835,8 @@ function RoleWorkbench({
   storeAppointments: StoreContentAppointment[];
   operationSubmissions: OperationSubmission[];
   materialTaskStatuses: Record<string, MaterialProductionStatus>;
+  materialQuotes: MaterialQuote[];
+  submitMaterialQuote: (quote: Omit<MaterialQuote, "id">) => void;
   workView: WorkView;
   currentUser: User;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
@@ -3908,7 +3959,9 @@ function RoleWorkbench({
         activities={allActivities}
         designAssets={designAssets}
         materialTaskStatuses={materialTaskStatuses}
+        materialQuotes={materialQuotes}
         submitDesignUpload={submitDesignUpload}
+        submitMaterialQuote={submitMaterialQuote}
         updateMaterialTaskStatus={updateMaterialTaskStatus}
         openActivity={openActivity}
         updateTaskStatus={updateTaskStatus}
@@ -4340,7 +4393,9 @@ function DesignerWorkbench({
   activities,
   designAssets,
   materialTaskStatuses,
+  materialQuotes,
   submitDesignUpload,
+  submitMaterialQuote,
   updateMaterialTaskStatus,
   openActivity,
   updateTaskStatus
@@ -4349,24 +4404,13 @@ function DesignerWorkbench({
   activities: Activity[];
   designAssets: DesignAsset[];
   materialTaskStatuses: Record<string, MaterialProductionStatus>;
+  materialQuotes: MaterialQuote[];
   submitDesignUpload: (input: DesignUploadInput) => void;
+  submitMaterialQuote: (quote: Omit<MaterialQuote, "id">) => void;
   updateMaterialTaskStatus: (taskId: string, status: MaterialProductionStatus) => void;
   openActivity: (id: string) => void;
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
 }) {
-  const [quotes, setQuotes] = useState<MaterialQuote[]>([
-    {
-      id: "mq1",
-      activityId: "a1",
-      taskTitle: "端午台卡物料制作",
-      supplier: "忻州快印工场",
-      materialName: "桌面台卡",
-      deadline: "2026-06-18",
-      amount: 18500,
-      note: "200 套台卡，含加急制作和同城配送。",
-      status: "已记录"
-    }
-  ]);
   const designTasks = tasks.filter((task) => task.type.includes("设计"));
   const materialTasks = tasks.filter((task) => task.type.includes("物料"));
   const assignedActivityIds = new Set(tasks.map((task) => task.activityId));
@@ -4416,8 +4460,8 @@ function DesignerWorkbench({
           <MaterialQuotePanel
             materialTasks={materialTasks}
             activities={activities}
-            quotes={quotes}
-            submitQuote={(quote) => setQuotes((current) => [{ ...quote, id: `mq${current.length + 1}` }, ...current])}
+            quotes={materialQuotes}
+            submitQuote={submitMaterialQuote}
             openActivity={openActivity}
           />
         </aside>
@@ -7958,6 +8002,7 @@ function ActivityDetail({
   approveDesignAsset,
   rejectDesignAsset,
   confirmActivityCost,
+  submitActivityReview,
   currentUser,
   selectActivity
 }: {
@@ -7974,6 +8019,7 @@ function ActivityDetail({
   approveDesignAsset: (assetId: string) => void;
   rejectDesignAsset: (assetId: string, comment: string) => void;
   confirmActivityCost: (activityId: string) => void;
+  submitActivityReview: (activityId: string, summary: string) => void;
   currentUser: User;
   selectActivity: (id: string) => void;
 }) {
@@ -7981,6 +8027,12 @@ function ActivityDetail({
   const previous = activity.previousActivityId
     ? activities.find((item) => item.id === activity.previousActivityId)
     : undefined;
+  const canFillReview = currentUser.role === "老板" || canManageActivity(currentUser, activity);
+  const [reviewDraft, setReviewDraft] = useState(activity.reviewSummary ?? "");
+
+  useEffect(() => {
+    setReviewDraft(activity.reviewSummary ?? "");
+  }, [activity.id]);
   const costConfirmed = costConfirmedActivityIds.includes(activity.id);
   const costItems = getActivityCostItems(activity, operationSubmissions, costConfirmed);
   const costTotal = costItems.reduce((sum, item) => sum + item.amount, 0);
@@ -8178,15 +8230,35 @@ function ActivityDetail({
 
         <article className="panel">
           <div className="panel-title">
-            <h3>复盘和历史</h3>
-            <span>{previous ? "有关联活动" : "暂无历史"}</span>
+            <h3>复盘归档</h3>
+            <span>{activity.reviewSummary ? "已归档" : "待项目总填写"}</span>
           </div>
-          {previous ? (
-            <p className="body-copy">
-              上一年度活动：{previous.name}。历史问题：物料到店偏晚，部分门店套餐口径不统一。下一年建议：提前完成物料，增加儿童餐和短视频预热。
-            </p>
+          {canFillReview ? (
+            <div className="review-archive-form">
+              <textarea
+                rows={4}
+                value={reviewDraft}
+                onChange={(event) => setReviewDraft(event.target.value)}
+                placeholder="活动亮点、出现的问题、顾客反馈、下一次的建议..."
+              />
+              <button
+                className="primary"
+                disabled={!reviewDraft.trim()}
+                onClick={() => submitActivityReview(activity.id, reviewDraft)}
+              >
+                {activity.reviewSummary ? "更新复盘归档" : "提交复盘并完成活动"}
+              </button>
+            </div>
+          ) : activity.reviewSummary ? (
+            <p className="body-copy">{activity.reviewSummary}</p>
           ) : (
-            <p className="body-copy">活动完成后可填写亮点、问题、顾客反馈和下一年度建议。</p>
+            <p className="body-copy">活动结束后由项目总在这里归档亮点、问题、顾客反馈和下一次建议。</p>
+          )}
+          {previous && (
+            <div className="previous-review">
+              <strong>上一次活动（{previous.name}）的复盘</strong>
+              <p className="body-copy">{previous.reviewSummary || "上一次活动未填写复盘。"}</p>
+            </div>
           )}
         </article>
       </section>

@@ -70,6 +70,21 @@ export interface Activity {
   actualCost: number;
   status: ActivityStatus;
   previousActivityId?: string;
+  // 活动复盘归档内容（项目总在活动详情填写）。
+  reviewSummary?: string;
+}
+
+// 设计部记录的物料供应商报价（留档用）。
+export interface MaterialQuote {
+  id: string;
+  activityId: string;
+  taskTitle: string;
+  supplier: string;
+  materialName: string;
+  deadline: string;
+  amount: number;
+  note: string;
+  status: "已记录";
 }
 
 export interface Task {
@@ -188,6 +203,7 @@ export interface MarketingState {
   storeAppointments: StoreContentAppointment[];
   operationSubmissions: OperationSubmission[];
   storeReports: StoreReport[];
+  materialQuotes: MaterialQuote[];
   costConfirmedActivityIds: string[];
   materialTaskStatuses: Record<string, string>;
 }
@@ -209,6 +225,7 @@ export interface MarketingStateDelta {
   storeAppointments?: CollectionDelta<StoreContentAppointment>;
   operationSubmissions?: CollectionDelta<OperationSubmission>;
   storeReports?: CollectionDelta<StoreReport>;
+  materialQuotes?: CollectionDelta<MaterialQuote>;
   costConfirmedActivityIds?: { added: string[]; removed: string[] };
   materialTaskStatuses?: { upserts: Record<string, string>; deleteIds: string[] };
 }

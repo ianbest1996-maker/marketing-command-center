@@ -3494,6 +3494,38 @@ select {
   font-size: 12px;
 }
 
+/* 活动复盘归档 */
+.review-archive-form {
+  display: grid;
+  gap: 10px;
+}
+
+.review-archive-form textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 11px;
+  resize: vertical;
+}
+
+.review-archive-form button {
+  justify-self: start;
+}
+
+.previous-review {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px dashed var(--line);
+}
+
+.previous-review strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
 /* 任务说明结构化展示（规格高亮、键做胶囊、说明淡化） */
 .task-standard {
   display: grid;

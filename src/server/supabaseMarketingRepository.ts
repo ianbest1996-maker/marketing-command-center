@@ -5,6 +5,7 @@ import type {
   Idea,
   MarketingState,
   MarketingStateDelta,
+  MaterialQuote,
   OperationSubmission,
   Store,
   StoreContentAppointment,
@@ -227,7 +228,8 @@ function toActivity(row: AnyRow, storeIds: string[]): Activity {
     budget: Number(row.budget),
     actualCost: Number(row.actual_cost),
     status: row.status as Activity["status"],
-    previousActivityId: row.previous_activity_id ? String(row.previous_activity_id) : undefined
+    previousActivityId: row.previous_activity_id ? String(row.previous_activity_id) : undefined,
+    reviewSummary: row.review_summary ? String(row.review_summary) : ""
   };
 }
 
@@ -247,7 +249,8 @@ function fromActivity(activity: Activity): AnyRow {
     budget: activity.budget,
     actual_cost: activity.actualCost,
     status: activity.status,
-    previous_activity_id: activity.previousActivityId ?? null
+    previous_activity_id: activity.previousActivityId ?? null,
+    review_summary: activity.reviewSummary ?? ""
   };
 }
 
@@ -433,6 +436,34 @@ function fromStoreReport(report: StoreReport): AnyRow {
   };
 }
 
+function toMaterialQuote(row: AnyRow): MaterialQuote {
+  return {
+    id: String(row.id),
+    activityId: String(row.activity_id),
+    taskTitle: String(row.task_title ?? ""),
+    supplier: String(row.supplier ?? ""),
+    materialName: String(row.material_name ?? ""),
+    deadline: row.deadline ? String(row.deadline) : "",
+    amount: Number(row.amount ?? 0),
+    note: String(row.note ?? ""),
+    status: "已记录"
+  };
+}
+
+function fromMaterialQuote(quote: MaterialQuote): AnyRow {
+  return {
+    id: quote.id,
+    activity_id: quote.activityId,
+    task_title: quote.taskTitle,
+    supplier: quote.supplier,
+    material_name: quote.materialName,
+    deadline: quote.deadline || null,
+    amount: quote.amount,
+    note: quote.note,
+    status: quote.status
+  };
+}
+
 function toIdea(row: AnyRow, brands: string[]): Idea {
   return {
     id: String(row.id),
@@ -483,6 +514,7 @@ export async function readMarketingState(): Promise<MarketingState> {
     appointmentRows,
     operationSubmissionRows,
     storeReportRows,
+    materialQuoteRows,
     materialStatusRows,
     costConfirmationRows
   ] = await Promise.all([
@@ -498,6 +530,7 @@ export async function readMarketingState(): Promise<MarketingState> {
     readTable<AnyRow>("store_appointments"),
     readTable<AnyRow>("operation_submissions"),
     readTable<AnyRow>("store_reports"),
+    readTable<AnyRow>("material_quotes"),
     readTable<AnyRow>("material_task_statuses", "task_id.asc"),
     readTable<AnyRow>("cost_confirmations", "activity_id.asc")
   ]);
@@ -525,6 +558,7 @@ export async function readMarketingState(): Promise<MarketingState> {
     storeAppointments: appointmentRows.map(toAppointment),
     operationSubmissions: operationSubmissionRows.map(toOperationSubmission),
     storeReports: storeReportRows.map(toStoreReport),
+    materialQuotes: materialQuoteRows.map(toMaterialQuote),
     costConfirmedActivityIds: costConfirmationRows.map((row) => String(row.activity_id)),
     materialTaskStatuses: Object.fromEntries(
       materialStatusRows.map((row) => [String(row.task_id), String(row.status)])
@@ -539,6 +573,7 @@ export async function writeMarketingState(state: MarketingState) {
 
   await clearTable("cost_confirmations", "activity_id");
   await clearTable("material_task_statuses", "task_id");
+  await clearTable("material_quotes");
   await clearTable("store_reports");
   await clearTable("operation_submissions");
   await clearTable("store_appointments");
@@ -568,6 +603,7 @@ export async function writeMarketingState(state: MarketingState) {
   await upsertRows("store_appointments", state.storeAppointments.map(fromAppointment));
   await upsertRows("operation_submissions", state.operationSubmissions.map(fromOperationSubmission));
   await upsertRows("store_reports", (state.storeReports ?? []).map(fromStoreReport));
+  await upsertRows("material_quotes", (state.materialQuotes ?? []).map(fromMaterialQuote));
   await upsertRows(
     "material_task_statuses",
     Object.entries(state.materialTaskStatuses).map(([taskId, status]) => ({ task_id: taskId, status })),
@@ -664,6 +700,11 @@ export async function applyMarketingStateDelta(delta: MarketingStateDelta) {
   if (delta.storeReports) {
     await upsertRows("store_reports", delta.storeReports.upserts.map(fromStoreReport));
     await deleteByIds("store_reports", delta.storeReports.deleteIds);
+  }
+
+  if (delta.materialQuotes) {
+    await upsertRows("material_quotes", delta.materialQuotes.upserts.map(fromMaterialQuote));
+    await deleteByIds("material_quotes", delta.materialQuotes.deleteIds);
   }
 
   if (delta.materialTaskStatuses) {
