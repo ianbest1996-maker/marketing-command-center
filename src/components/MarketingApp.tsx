@@ -8275,6 +8275,126 @@ function ActivityDetail({
   );
 }
 
+type AiGeneratedIdea = {
+  title: string;
+  platform: string;
+  brands: string[];
+  budget: number;
+  url: string;
+  suggestion: string;
+};
+
+function AiIdeaGenerator({
+  submitIdea,
+  currentUser
+}: {
+  submitIdea: (idea: IdeaInput) => void;
+  currentUser: User;
+}) {
+  const defaultBrand = getUserDefaultBrand(currentUser);
+  const initialBrand: Brand = defaultBrand === "全部" ? "中餐" : defaultBrand;
+  const [brand, setBrand] = useState<Brand>(initialBrand);
+  const [theme, setTheme] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState<AiGeneratedIdea[]>([]);
+  const [savedKeys, setSavedKeys] = useState<string[]>([]);
+
+  async function generate() {
+    setLoading(true);
+    setError("");
+    setSavedKeys([]);
+    try {
+      const response = await fetch("/api/idea-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme, brand })
+      });
+      const data = (await response.json()) as { ideas?: AiGeneratedIdea[]; error?: string };
+      if (!response.ok) {
+        setError(data.error || "生成失败，请重试。");
+        setResults([]);
+        return;
+      }
+      setResults(data.ideas ?? []);
+    } catch {
+      setError("网络异常，请稍后重试。");
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function saveIdea(idea: AiGeneratedIdea, key: string) {
+    submitIdea({
+      title: idea.title,
+      platform: idea.platform,
+      url: idea.url,
+      brands: idea.brands as Brand[],
+      budget: idea.budget,
+      suggestion: idea.suggestion
+    });
+    setSavedKeys((current) => (current.includes(key) ? current : [...current, key]));
+  }
+
+  return (
+    <article className="panel ai-idea-panel">
+      <div className="panel-title">
+        <h3>AI 生成灵感</h3>
+        <span>Kimi · 一键产出可落地的营销点子</span>
+      </div>
+      <div className="ai-idea-controls">
+        <label>
+          <span>品牌</span>
+          <select value={brand} onChange={(event) => setBrand(event.target.value as Brand)}>
+            {(["中餐", "火锅", "虾锅"] as Brand[]).map((item) => (
+              <option key={item} value={item}>{item}</option>
+            ))}
+          </select>
+        </label>
+        <label className="ai-idea-theme">
+          <span>主题 / 方向（可留空）</span>
+          <input
+            value={theme}
+            placeholder="例如：暑期升学宴、七夕情侣局、夜宵啤酒场"
+            onChange={(event) => setTheme(event.target.value)}
+          />
+        </label>
+        <button className="primary" disabled={loading} onClick={generate}>
+          {loading ? "AI 生成中…" : "生成灵感"}
+        </button>
+      </div>
+
+      {error && <p className="ai-idea-error">{error}</p>}
+
+      {results.length > 0 && (
+        <div className="ai-idea-results">
+          {results.map((idea, index) => {
+            const key = `${idea.title}-${index}`;
+            const saved = savedKeys.includes(key);
+            return (
+              <article className="ai-idea-card" key={key}>
+                <div className="ai-idea-card-head">
+                  <strong>{idea.title}</strong>
+                  <span>{idea.platform} · {idea.brands.join("、")} · {yuan(idea.budget)}</span>
+                </div>
+                <p>{idea.suggestion}</p>
+                <button
+                  className="ghost-button"
+                  disabled={saved}
+                  onClick={() => saveIdea(idea, key)}
+                >
+                  {saved ? "已保存 ✓" : "保存到灵感池"}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </article>
+  );
+}
+
 function IdeaPool({
   ideas,
   convertIdeaToActivity,
@@ -8288,6 +8408,7 @@ function IdeaPool({
 }) {
   return (
     <div className="page-stack">
+      <AiIdeaGenerator submitIdea={submitIdea} currentUser={currentUser} />
       <IdeaCapturePanel currentUser={currentUser} ideas={ideas} submitIdea={submitIdea} />
       {ideas.length > 0 ? (
         <section className="idea-grid">
