@@ -2671,7 +2671,14 @@ export function MarketingApp() {
           )
         )}
 
-        {activeNav === "灵感池" && <IdeaPool ideas={localIdeas} convertIdeaToActivity={convertIdeaToActivity} />}
+        {activeNav === "灵感池" && (
+          <IdeaPool
+            ideas={localIdeas}
+            convertIdeaToActivity={convertIdeaToActivity}
+            submitIdea={submitIdea}
+            currentUser={currentUser}
+          />
+        )}
 
         {activeNav === "数据复盘" && (
           <Analytics activities={filteredActivities} />
@@ -3243,7 +3250,7 @@ function IdeaCapturePanel({
   currentUser: User;
   ideas: Idea[];
   submitIdea: (idea: IdeaInput) => void;
-  onUseIdea: (idea: Idea) => void;
+  onUseIdea?: (idea: Idea) => void;
 }) {
   const defaultBrand = getUserDefaultBrand(currentUser);
   const initialBrand = defaultBrand === "全部" ? "中餐" : defaultBrand;
@@ -3329,18 +3336,20 @@ function IdeaCapturePanel({
           </button>
         </div>
 
-        <div className="idea-mini-list">
-          {ideas.slice(0, 4).map((idea) => (
-            <article className="idea-mini-card" key={idea.id}>
-              <div>
-                <strong>{idea.title}</strong>
-                <span>{idea.platform} · {idea.brands.join("、")} · {yuan(idea.budget)}</span>
-              </div>
-              <p>{idea.suggestion}</p>
-              <button onClick={() => onUseIdea(idea)}>带入项目提报</button>
-            </article>
-          ))}
-        </div>
+        {onUseIdea && (
+          <div className="idea-mini-list">
+            {ideas.slice(0, 4).map((idea) => (
+              <article className="idea-mini-card" key={idea.id}>
+                <div>
+                  <strong>{idea.title}</strong>
+                  <span>{idea.platform} · {idea.brands.join("、")} · {yuan(idea.budget)}</span>
+                </div>
+                <p>{idea.suggestion}</p>
+                <button onClick={() => onUseIdea(idea)}>带入项目提报</button>
+              </article>
+            ))}
+          </div>
+        )}
       </div>
     </article>
   );
@@ -8268,35 +8277,50 @@ function ActivityDetail({
 
 function IdeaPool({
   ideas,
-  convertIdeaToActivity
+  convertIdeaToActivity,
+  submitIdea,
+  currentUser
 }: {
   ideas: Idea[];
   convertIdeaToActivity: (ideaId: string) => void;
+  submitIdea: (idea: IdeaInput) => void;
+  currentUser: User;
 }) {
   return (
-    <section className="idea-grid">
-      {ideas.map((idea) => (
-        <article className="panel" key={idea.id}>
-          <div className="panel-title">
-            <h3>{idea.title}</h3>
-            <span>{idea.status}</span>
-          </div>
-          <dl className="info-list">
-            <div><dt>来源平台</dt><dd>{idea.platform}</dd></div>
-            <div><dt>适用品牌</dt><dd>{idea.brands.join("、")}</dd></div>
-            <div><dt>初步预算</dt><dd>{yuan(idea.budget)}</dd></div>
-          </dl>
-          <p className="body-copy">{idea.suggestion}</p>
-          <button
-            className="primary"
-            disabled={idea.status === "已转活动"}
-            onClick={() => convertIdeaToActivity(idea.id)}
-          >
-            {idea.status === "已转活动" ? "已转为活动" : "转换为正式活动"}
-          </button>
+    <div className="page-stack">
+      <IdeaCapturePanel currentUser={currentUser} ideas={ideas} submitIdea={submitIdea} />
+      {ideas.length > 0 ? (
+        <section className="idea-grid">
+          {ideas.map((idea) => (
+            <article className="panel" key={idea.id}>
+              <div className="panel-title">
+                <h3>{idea.title}</h3>
+                <span>{idea.status}</span>
+              </div>
+              <dl className="info-list">
+                <div><dt>来源平台</dt><dd>{idea.platform}</dd></div>
+                <div><dt>适用品牌</dt><dd>{idea.brands.join("、")}</dd></div>
+                <div><dt>初步预算</dt><dd>{yuan(idea.budget)}</dd></div>
+              </dl>
+              <p className="body-copy">{idea.suggestion}</p>
+              <button
+                className="primary"
+                disabled={idea.status === "已转活动"}
+                onClick={() => convertIdeaToActivity(idea.id)}
+              >
+                {idea.status === "已转活动" ? "已转为活动" : "转换为正式活动"}
+              </button>
+            </article>
+          ))}
+        </section>
+      ) : (
+        <article className="panel">
+          <p className="body-copy">
+            还没有收集任何灵感。用上面的「灵感记录」把小红书、抖音、大众点评上看到的好想法先记下来；评估后可以一键转成正式活动、提交给老板审核。
+          </p>
         </article>
-      ))}
-    </section>
+      )}
+    </div>
   );
 }
 
