@@ -778,11 +778,18 @@ function getScopedTasksForUser(user: User, allActivities: Activity[], allTasks: 
   return allTasks.filter((task) => task.owner === user.name);
 }
 
-function createGeneratedTasks(activity: Activity, currentCount: number, plan: LaunchPlanInput): Task[] {
+// 生成全局唯一 ID：时间戳(36 进制) + 随机串。
+// 取代「数组长度 + 1」的写法——那种写法在删除条目或多人同时操作时会产生相同 ID，
+// 而云端按 ID upsert，一旦撞车就会静默覆盖已有数据。
+function uid(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createGeneratedTasks(activity: Activity, plan: LaunchPlanInput): Task[] {
   const projectLead = getActivityOwner(activity);
   const baseTasks: Task[] = [
     {
-      id: `t${currentCount + 1}`,
+      id: uid("t"),
       activityId: activity.id,
       title: "项目排期和任务下派确认",
       type: "规划",
@@ -793,7 +800,7 @@ function createGeneratedTasks(activity: Activity, currentCount: number, plan: La
       isKey: true
     },
     {
-      id: `t${currentCount + 2}`,
+      id: uid("t"),
       activityId: activity.id,
       title: plan.designTaskTitle,
       type: "设计",
@@ -804,7 +811,7 @@ function createGeneratedTasks(activity: Activity, currentCount: number, plan: La
       isKey: true
     },
     {
-      id: `t${currentCount + 3}`,
+      id: uid("t"),
       activityId: activity.id,
       title: "物料下单、到货确认和门店领取通知",
       type: "物料",
@@ -815,7 +822,7 @@ function createGeneratedTasks(activity: Activity, currentCount: number, plan: La
       isKey: true
     },
     {
-      id: `t${currentCount + 4}`,
+      id: uid("t"),
       activityId: activity.id,
       title: plan.contentTaskTitle,
       type: "内容",
@@ -826,7 +833,7 @@ function createGeneratedTasks(activity: Activity, currentCount: number, plan: La
       isKey: true
     },
     {
-      id: `t${currentCount + 5}`,
+      id: uid("t"),
       activityId: activity.id,
       title: "活动数据回收和门店填报跟进",
       type: "数据",
@@ -837,7 +844,7 @@ function createGeneratedTasks(activity: Activity, currentCount: number, plan: La
       isKey: true
     },
     {
-      id: `t${currentCount + 6}`,
+      id: uid("t"),
       activityId: activity.id,
       title: "活动数据汇总和复盘",
       type: "复盘",
@@ -849,12 +856,11 @@ function createGeneratedTasks(activity: Activity, currentCount: number, plan: La
     }
   ];
 
-  const storeTasks = activity.storeIds.flatMap((storeId, index) => {
+  const storeTasks = activity.storeIds.flatMap((storeId) => {
     const store = stores.find((item) => item.id === storeId);
-    const baseId = currentCount + baseTasks.length + 1 + index * 2;
     return [
       {
-        id: `t${baseId}`,
+        id: uid("t"),
         activityId: activity.id,
         title: `${store?.name ?? "门店"}领取物料、装饰门店和员工培训`,
         type: "门店执行",
@@ -866,7 +872,7 @@ function createGeneratedTasks(activity: Activity, currentCount: number, plan: La
         isKey: true
       },
       {
-        id: `t${baseId + 1}`,
+        id: uid("t"),
         activityId: activity.id,
         title: `${store?.name ?? "门店"}每日活动数据填报`,
         type: "门店数据",
@@ -1872,7 +1878,7 @@ export function MarketingApp() {
           : task
       );
       if (hasLaunchTasks) return reviewedTasks;
-      return [...reviewedTasks, ...createGeneratedTasks(activity, reviewedTasks.length, plan)];
+      return [...reviewedTasks, ...createGeneratedTasks(activity, plan)];
     });
     moveActivity(plan.activityId, "设计和物料");
     notifySubmitted("节点已下发，任务已分配到各部门");
@@ -1881,7 +1887,7 @@ export function MarketingApp() {
   function submitActivityProposal(proposal: Omit<Activity, "id" | "actualCost" | "status">) {
     const nextActivity: Activity = {
       ...proposal,
-      id: `a${activities.length + 1}`,
+      id: uid("a"),
       owner: getActivityOwner(proposal),
       actualCost: 0,
       status: "待老板审核"
@@ -1960,7 +1966,7 @@ export function MarketingApp() {
   function submitIdea(input: IdeaInput) {
     const nextIdea: Idea = {
       ...input,
-      id: `i${localIdeas.length + 1}`,
+      id: uid("i"),
       status: "待评估"
     };
     setLocalIdeas((current) => [nextIdea, ...current]);
@@ -1998,7 +2004,7 @@ export function MarketingApp() {
   function submitStoreAppointment(input: StoreAppointmentInput) {
     const nextAppointment: StoreContentAppointment = {
       ...input,
-      id: `sa${storeAppointments.length + 1}`,
+      id: uid("sa"),
       status: "待店长选择",
       createdAt: TODAY
     };
@@ -2067,7 +2073,7 @@ export function MarketingApp() {
   function submitOperationSubmission(input: OperationSubmissionInput) {
     const nextSubmission: OperationSubmission = {
       ...input,
-      id: `op${operationSubmissions.length + 1}`,
+      id: uid("op"),
       status: "待项目总审核",
       submittedAt: TODAY
     };
@@ -2359,7 +2365,7 @@ export function MarketingApp() {
   function submitDesignUpload(input: DesignUploadInput) {
     setDesignAssets((current) => [
       {
-        id: `d${current.length + 1}`,
+        id: uid("d"),
         activityId: input.activityId,
         title: input.title,
         type: input.type,
