@@ -49,8 +49,15 @@ const brandColors: Record<Brand, string> = {
 };
 const LEGACY_BOSS_NAME = "王总";
 const DEFAULT_BOSS_NAME = "闫总";
-const DESIGN_OWNER_NAME = "陈设计";
-const OPERATIONS_OWNER_NAME = "刘运营";
+// 按角色解析当前的设计/运营负责人姓名（而不是写死人名）。
+// 任务的「派单」和「查找」都走这里，保证内部一致；改名时 saveUser 会级联更新历史归属。
+// 找不到对应角色的账号时，回退到默认名。
+function getDesignerName(): string {
+  return users.find((user) => user.role === "设计人员")?.name ?? "陈设计";
+}
+function getOperationsName(): string {
+  return users.find((user) => user.role === "内容及投放运营")?.name ?? "刘运营";
+}
 const LAUNCH_PLAN_TASK_MARKER = "填写节点截止日期";
 const TRIAL_LOGIN_PASSWORD = "123456";
 
@@ -613,21 +620,21 @@ function getActivityCostItems(
   return [
     {
       category: "物料费用",
-      owner: DESIGN_OWNER_NAME,
+      owner: getDesignerName(),
       amount: materialAmount,
       status,
       note: "海报、菜单、台卡、门店物料制作和配送费用。"
     },
     {
       category: "探店达人",
-      owner: OPERATIONS_OWNER_NAME,
+      owner: getOperationsName(),
       amount: influencerAmount,
       status,
       note: "达人探店、图文或短视频合作费用。"
     },
     {
       category: "广告投流",
-      owner: OPERATIONS_OWNER_NAME,
+      owner: getOperationsName(),
       amount: adAmount,
       status:
         approved ||
@@ -804,7 +811,7 @@ function createGeneratedTasks(activity: Activity, plan: LaunchPlanInput): Task[]
       activityId: activity.id,
       title: plan.designTaskTitle,
       type: "设计",
-      owner: DESIGN_OWNER_NAME,
+      owner: getDesignerName(),
       dueDate: plan.designDueDate,
       status: "待开始",
       standard: `${plan.designTaskNote}\n用途：${plan.designPurpose}\n数量：${plan.designQuantity}\n尺寸：${plan.designSizes}\n定制物料：${plan.customMaterialRequirement || "无"}\n设计内容需先提交项目总审核，通过后才能进入物料制作。`,
@@ -815,7 +822,7 @@ function createGeneratedTasks(activity: Activity, plan: LaunchPlanInput): Task[]
       activityId: activity.id,
       title: "物料下单、到货确认和门店领取通知",
       type: "物料",
-      owner: DESIGN_OWNER_NAME,
+      owner: getDesignerName(),
       dueDate: plan.materialDueDate,
       status: "待开始",
       standard: `${plan.materialTaskNote}\n设计审核通过后下单物料；物料到货后将状态改为物料到货，并通知参与门店领取物料。`,
@@ -826,7 +833,7 @@ function createGeneratedTasks(activity: Activity, plan: LaunchPlanInput): Task[]
       activityId: activity.id,
       title: plan.contentTaskTitle,
       type: "内容",
-      owner: OPERATIONS_OWNER_NAME,
+      owner: getOperationsName(),
       dueDate: plan.contentDueDate,
       status: "待开始",
       standard: `${plan.operationTaskNote}\n短视频数量：${plan.shortVideoCount}\n探店达人：${plan.influencerRequirement}；平台：${plan.influencerPlatform}；预算：${plan.influencerBudget}\n直播场次：${plan.liveSessionCount}\n运营需提交短视频内容、达人报价和直播计划给项目总审核；通过后再与门店预约拍摄/直播时间。`,
@@ -1041,7 +1048,7 @@ function getMonitorNodes(
     bossReviewNode,
     {
       label: "设计稿审批",
-      owner: designTasks.matched[0]?.owner ?? DESIGN_OWNER_NAME,
+      owner: designTasks.matched[0]?.owner ?? getDesignerName(),
       dueDate: designTasks.latestDueDate || addDays(activity.startDate, -14),
       state: evaluateNode(
         designApproved,
@@ -1059,7 +1066,7 @@ function getMonitorNodes(
     },
     {
       label: "物料制作",
-      owner: materialTasks.matched[0]?.owner ?? DESIGN_OWNER_NAME,
+      owner: materialTasks.matched[0]?.owner ?? getDesignerName(),
       dueDate: materialTasks.latestDueDate || addDays(activity.startDate, -8),
       state: evaluateNode(
         materialDone,
@@ -1072,7 +1079,7 @@ function getMonitorNodes(
     },
     {
       label: "平台内容",
-      owner: contentTasks.matched[0]?.owner ?? OPERATIONS_OWNER_NAME,
+      owner: contentTasks.matched[0]?.owner ?? getOperationsName(),
       dueDate: contentTasks.latestDueDate || addDays(activity.startDate, -5),
       state: evaluateNode(
         operationNodeDone,
@@ -2124,7 +2131,7 @@ export function MarketingApp() {
       setTasks((current) =>
         current.map((task) =>
           task.activityId === targetSubmission.activityId &&
-          task.owner === OPERATIONS_OWNER_NAME &&
+          task.owner === getOperationsName() &&
           (task.type.includes("内容") || task.type.includes("投流") || task.type.includes("达人"))
             ? { ...task, status: "已完成" as const, standard: `${task.standard}\n运营执行已由项目总复核通过。` }
             : task
@@ -2170,7 +2177,7 @@ export function MarketingApp() {
       setTasks((current) =>
         current.map((task) =>
           task.activityId === targetSubmission.activityId &&
-          task.owner === OPERATIONS_OWNER_NAME &&
+          task.owner === getOperationsName() &&
           (task.type.includes("内容") || task.type.includes("投流") || task.type.includes("达人"))
             ? { ...task, status: "进行中" as const, standard: `${task.standard}\n复核被退回：${effectiveComment}` }
             : task
@@ -2198,7 +2205,7 @@ export function MarketingApp() {
       setTasks((current) =>
         current.map((task) =>
           task.activityId === targetSubmission.activityId &&
-          task.owner === OPERATIONS_OWNER_NAME &&
+          task.owner === getOperationsName() &&
           (task.type.includes("内容") || task.type.includes("投流") || task.type.includes("达人"))
             ? { ...task, status: "进行中" as const, standard: `${task.standard}\n运营已提交执行结果，等待项目总复核。` }
             : task
@@ -2288,7 +2295,7 @@ export function MarketingApp() {
         activityId: submission.activityId,
         title: `直播商品图设计：${submission.title}`,
         type: "设计",
-        owner: DESIGN_OWNER_NAME,
+        owner: getDesignerName(),
         dueDate: addDays(TODAY, 2),
         status: "待开始",
         standard: submission.designRequest || "运营需要直播商品图，请根据直播计划设计商品图。",
@@ -2318,7 +2325,7 @@ export function MarketingApp() {
     if (asset) {
       setTasks((current) =>
         current.map((task) =>
-          task.activityId === asset.activityId && task.owner === DESIGN_OWNER_NAME && task.type.includes("设计")
+          task.activityId === asset.activityId && task.owner === getDesignerName() && task.type.includes("设计")
             ? { ...task, status: "已完成" as const, standard: `${task.standard}\n设计稿已审批通过，可以进入物料制作。` }
             : task
         )
@@ -2372,7 +2379,7 @@ export function MarketingApp() {
         purpose: input.purpose,
         fileNames: input.fileNames,
         files: input.files,
-        designer: DESIGN_OWNER_NAME,
+        designer: getDesignerName(),
         version: 1,
         status: "待老板审核",
         submittedAt: TODAY,
@@ -2384,7 +2391,7 @@ export function MarketingApp() {
     ]);
     setTasks((current) =>
       current.map((task) =>
-        task.activityId === input.activityId && task.owner === DESIGN_OWNER_NAME && (task.type.includes("设计") || task.title.includes("设计"))
+        task.activityId === input.activityId && task.owner === getDesignerName() && (task.type.includes("设计") || task.title.includes("设计"))
           ? { ...task, status: "进行中" as const, standard: `${task.standard}\n设计稿已提交，项目节点进入审核中。` }
           : task
       )
@@ -5327,7 +5334,7 @@ function OperationSubmissionPanel({
                 activityId: selectedActivity.id,
                 type,
                 title,
-                owner: OPERATIONS_OWNER_NAME,
+                owner: getOperationsName(),
                 benchmarkLinks,
                 contentPlan,
                 budget: needsBudget ? budget : undefined,
@@ -5654,7 +5661,7 @@ function StoreAppointmentDialog({
                     storeId,
                     type,
                     title,
-                    requestedBy: OPERATIONS_OWNER_NAME,
+                    requestedBy: getOperationsName(),
                     detail,
                     candidateSlots: [slotOne, slotTwo, slotThree].map((slot) => slot.trim()).filter(Boolean)
                   });
