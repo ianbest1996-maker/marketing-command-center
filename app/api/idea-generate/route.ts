@@ -61,17 +61,36 @@ export async function POST(request: Request) {
   const brandInput = typeof body.brand === "string" ? body.brand.trim() : "";
   const brand = (BRANDS as readonly string[]).includes(brandInput) ? brandInput : "中餐";
 
-  const systemPrompt =
-    "你是一位资深餐饮品牌营销策划，服务对象是一家有中餐、火锅、虾锅三个品牌的连锁餐饮集团。" +
-    "请针对给定品牌和主题，产出可落地的门店营销灵感。" +
-    "每条灵感要具体、接地气、能直接转成一次营销活动，避免空话套话。" +
-    "只能从这些平台里选来源：小红书、抖音、大众点评、美团、朋友圈、线下观察。" +
-    "预算单位是人民币元，给一个符合中小餐饮门店的合理数字。" +
-    '严格只输出 JSON，格式为 {"ideas":[{"title":"简短标题","platform":"来源平台",' +
-    '"brands":["适用品牌"],"budget":数字,"suggestion":"两三句可执行的做法建议"}]}，' +
-    "生成 4 条，不要输出 JSON 以外的任何内容。";
+  const brandContext: Record<string, string> = {
+    中餐:
+      "中餐品牌：主打正餐、家宴、宴席（升学宴/谢师宴/生日宴/家庭聚餐/商务宴请），" +
+      "卖点是包间、菜品仪式感、人均性价比，适合小红书图文和抖音上菜/宴席场景。",
+    火锅:
+      "火锅品牌：主打社交聚餐、朋友局、家庭局，卖点是锅底特色、涮品新鲜、氛围热闹，" +
+      "适合抖音出锅/涮煮画面、团购套餐、夜宵和晚市。",
+    虾锅:
+      "虾锅品牌：主打夜宵、啤酒场、年轻人聚会，卖点是麻辣鲜香、大份实惠、出片，" +
+      "适合抖音出锅/开吃、小红书打卡、晚市和宵夜时段。"
+  };
 
-  const userPrompt = `品牌：${brand}\n主题/方向：${theme || "近期适合做的本地营销活动"}\n请生成 4 条灵感。`;
+  const systemPrompt =
+    "你是一位服务本地连锁餐饮的资深营销策划，操盘过大量门店级落地活动。" +
+    "这家集团有中餐、火锅、虾锅三个品牌，你要针对指定品牌产出真正能执行的营销灵感。" +
+    `本次品牌背景：${brandContext[brand] ?? ""}` +
+    "要求：①每条灵感要具体到「做什么内容/给什么优惠/在什么时段」，能直接排成一次活动，" +
+    "拒绝「提升品牌影响力」「加强用户互动」这类空话；" +
+    "②做法建议里尽量点明拍摄要点或钩子（如出锅镜头、探店视角、套餐价格锚点）；" +
+    "③来源平台只能从这些里选：小红书、抖音、大众点评、美团、朋友圈、线下观察，且要和内容形式匹配；" +
+    "④预算单位人民币元，符合中小餐饮门店一次活动的合理投入（通常几千到两三万）；" +
+    "⑤4 条之间角度要有差异（内容种草 / 到店优惠 / 达人探店 / 私域朋友圈等），不要雷同。" +
+    '严格只输出 JSON，格式为 {"ideas":[{"title":"简短有记忆点的标题","platform":"来源平台",' +
+    '"brands":["适用品牌"],"budget":数字,"suggestion":"两三句具体可执行的做法"}]}，' +
+    "共 4 条，不要输出 JSON 以外的任何内容。";
+
+  const userPrompt =
+    `品牌：${brand}\n` +
+    `主题/方向：${theme || "近期（结合当前季节和节点）适合这个品牌做的本地营销活动"}\n` +
+    "请按要求生成 4 条互不雷同的灵感。";
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -84,7 +103,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: process.env.MOONSHOT_MODEL || "moonshot-v1-8k",
+        model: process.env.MOONSHOT_MODEL || "kimi-k2-0905-preview",
         temperature: 0.7,
         response_format: { type: "json_object" },
         messages: [
