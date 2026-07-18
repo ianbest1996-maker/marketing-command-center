@@ -103,7 +103,7 @@ export async function POST(request: Request) {
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: process.env.MOONSHOT_MODEL || "kimi-k2-0905-preview",
+        model: process.env.MOONSHOT_MODEL || "moonshot-v1-32k",
         temperature: 0.7,
         response_format: { type: "json_object" },
         messages: [
